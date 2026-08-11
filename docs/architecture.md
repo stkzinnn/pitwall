@@ -74,38 +74,44 @@ Fontes: [openf1.org](https://openf1.org/), [github.com/jolpica/jolpica-f1](https
 PitWall/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI app entrypoint
+│   │   ├── main.py              # FastAPI app entrypoint (lifespan liga a cache do FastF1)
 │   │   ├── core/                # configuração (env vars, settings)
 │   │   ├── api/v1/               # routers HTTP
 │   │   ├── data_sources/         # integração com FastF1 / Jolpica-F1
-│   │   ├── models/               # modelos SQLAlchemy (Fase 2)
+│   │   ├── db/                   # engine/sessão SQLAlchemy assíncrona
+│   │   ├── models/               # modelos SQLAlchemy (RaceSession, Lap, PitStop, Stint)
+│   │   ├── repositories/         # save_session / get_session (DB <-> SessionData)
 │   │   ├── schemas/              # schemas Pydantic (request/response)
 │   │   └── simulation/           # motor de simulação de estratégias
+│   ├── alembic/                  # migrations (template async)
 │   ├── tests/
 │   ├── requirements.txt
 │   ├── requirements-dev.txt
 │   ├── pyproject.toml            # config ruff/mypy/pytest
 │   └── .env.example
 ├── frontend/                     # placeholder — React/TS (fase futura)
-├── infra/                        # placeholder — Docker/K8s/CI (fase futura)
+├── infra/                        # placeholder — K8s/CI (fase futura)
 ├── docs/
 │   └── architecture.md
+├── docker-compose.yml            # Postgres 16 para desenvolvimento local
 └── README.md
 ```
 
-Preparado para, sem reestruturar, adicionar mais tarde: `infra/docker/`
-(Dockerfiles + docker-compose), `infra/k8s/` (manifests), `.github/workflows/`
-(CI/CD) e um serviço de observabilidade (logging estruturado + métricas).
+Preparado para, sem reestruturar, adicionar mais tarde: `infra/k8s/`
+(manifests), `.github/workflows/` (CI/CD), Dockerfile da própria app, e um
+serviço de observabilidade (logging estruturado + métricas).
 
 ## Roadmap (fases pequenas, uma de cada vez)
 
-1. **Fase 0 — Scaffold (esta etapa):** estrutura de pastas, FastAPI mínimo,
+1. ✅ **Fase 0 — Scaffold:** estrutura de pastas, FastAPI mínimo,
    testes, configuração por env vars, README, git. *(sem lógica de F1 ainda)*
-2. **Fase 1 — Ingestão de dados:** wrapper sobre FastF1 para carregar uma
+2. ✅ **Fase 1 — Ingestão de dados:** wrapper sobre FastF1 para carregar uma
    sessão de corrida (laps, stints, pit stops, clima, track status) e
    endpoint `GET /races/{year}/{round}` que devolve esses dados normalizados.
-3. **Fase 2 — Persistência:** modelos SQLAlchemy + Alembic; guardar os dados
-   ingeridos em PostgreSQL em vez de os pedir ao FastF1 a cada request.
+3. ✅ **Fase 2 — Persistência:** modelos SQLAlchemy assíncronos + Alembic;
+   `GET /races/{year}/{round}` lê primeiro da base de dados (PostgreSQL via
+   `asyncpg`) e só recorre ao FastF1 — gravando o resultado — se a corrida
+   ainda não tiver sido ingerida. Postgres local via `docker-compose.yml`.
 4. **Fase 3 — Motor de simulação (v1 simples):** dado um conjunto de voltas
    reais (pace por piloto/composto), simular uma estratégia alternativa
    (nº de paragens, volta da paragem, composto) e devolver tempo total

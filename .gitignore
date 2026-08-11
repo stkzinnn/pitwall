@@ -16,8 +16,8 @@ htmlcov/
 !.env.example
 
 # FastF1 cache (large binary session data, regenerated locally)
-.fastf1_cache/
-backend/.fastf1_cache/
+.cache/
+backend/.cache/
 
 # Node / frontend
 node_modules/

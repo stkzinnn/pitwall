@@ -18,11 +18,11 @@ class Settings(BaseSettings):
 
     api_v1_prefix: str = "/api/v1"
 
-    # Database (used from Phase 2 onwards)
-    database_url: str = "postgresql+psycopg://pitwall:pitwall@localhost:5432/pitwall"
+    # Database (async SQLAlchemy engine — see app/db/session.py)
+    database_url: str = "postgresql+asyncpg://pitwall:pitwall@localhost:5433/pitwall"
 
     # Data sources
-    fastf1_cache_dir: str = ".fastf1_cache"
+    fastf1_cache_dir: str = ".cache/fastf1"
     jolpica_base_url: str = "https://api.jolpi.ca/ergast/f1"
 
     # CORS

@@ -6,7 +6,7 @@ pydantic-settings==2.15.0
 # Data source for V1 (official F1 timing data: laps, stints/tyres, pit stops, weather, track status)
 fastf1==3.8.3
 
-# Persistence (wired up from Phase 2 onwards)
+# Persistence
 sqlalchemy==2.0.52
-psycopg[binary]==3.3.4
+asyncpg==0.31.0
 alembic==1.19.1

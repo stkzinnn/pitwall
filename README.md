@@ -17,8 +17,10 @@ arquitetura, escolha de fontes de dados e roadmap.
 🚧 V1 em desenvolvimento incremental, por fases pequenas. Ver o roadmap em
 [docs/architecture.md](docs/architecture.md#roadmap-fases-pequenas-uma-de-cada-vez).
 
-Nesta primeira etapa existe apenas o scaffold do backend (FastAPI a correr,
-sem lógica de F1 ainda).
+Fase 1 (ingestão via FastF1) e Fase 2 (persistência em PostgreSQL) já estão
+implementadas: `GET /api/v1/races/{year}/{round}` lê primeiro da base de
+dados e só recorre ao FastF1 (gravando o resultado) se a corrida ainda não
+tiver sido ingerida.
 
 ## Stack
 
@@ -27,12 +29,16 @@ sem lógica de F1 ainda).
 - **Dados:** [FastF1](https://docs.fastf1.dev/) (timing oficial: voltas,
   pneus, pit stops, clima, race control) — ver justificação em
   [docs/architecture.md](docs/architecture.md#fontes-de-dados--análise)
-- **Persistência:** PostgreSQL (a partir da Fase 2)
+- **Persistência:** PostgreSQL, via SQLAlchemy 2.x assíncrono (`asyncpg`) +
+  Alembic para migrations
 - **Frontend:** React + TypeScript (a partir da Fase 5)
 
 ## Desenvolvimento local
 
 ```bash
+# Base de dados (Postgres 16, porta 5433 — ver nota abaixo)
+docker compose up -d db
+
 cd backend
 python -m venv .venv
 .venv\Scripts\activate          # Windows
@@ -41,17 +47,35 @@ python -m venv .venv
 pip install -r requirements-dev.txt
 cp .env.example .env
 
+alembic upgrade head            # aplica as migrations
 uvicorn app.main:app --reload
 ```
 
+> **Nota:** o `docker-compose.yml` mapeia o Postgres para o porto **5433**
+> (não o 5432 por omissão), para não colidir com uma instalação local de
+> PostgreSQL já existente na máquina. Se não tiveres esse conflito, podes
+> alterar para 5432 no `docker-compose.yml` e no `.env`.
+
 A API fica disponível em `http://localhost:8000` e a documentação
 interativa (Swagger) em `http://localhost:8000/docs`.
+
+### Migrations (Alembic)
+
+```bash
+cd backend
+alembic revision --autogenerate -m "descrição da alteração"   # gerar
+alembic upgrade head                                            # aplicar
+```
+
+O `alembic/env.py` lê sempre `DATABASE_URL` a partir de `app.core.config`
+(logo do `.env`), nunca do `alembic.ini`, para nunca divergir da app.
 
 ### Testes
 
 ```bash
 cd backend
-pytest
+pytest                     # tudo (marca `integration` exige FastF1 + `docker compose up -d db` + migrations aplicadas)
+pytest -m "not integration"  # só testes unitários, offline, sem Postgres
 ```
 
 ### Lint / type-check

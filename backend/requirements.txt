@@ -1,0 +1,12 @@
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+pydantic-settings==2.15.0
+
+# Data source for V1 (official F1 timing data: laps, stints/tyres, pit stops, weather, track status)
+fastf1==3.8.3
+
+# Persistence (wired up from Phase 2 onwards)
+sqlalchemy==2.0.52
+psycopg[binary]==3.3.4
+alembic==1.19.1

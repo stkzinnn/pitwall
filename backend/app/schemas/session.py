@@ -11,6 +11,12 @@ class Lap(BaseModel):
     compound: str | None = None
     tyre_life: int | None = None
     position: int | None = None
+    # Raw FastF1 TrackStatus for this lap (e.g. "1", "126"), a string of one
+    # digit per status change during the lap. None for older/incomplete
+    # data — see fastf1_client.load_session_data, where a missing track
+    # status never flips data_complete to False (graceful degradation, not
+    # an error).
+    track_status: str | None = None
 
 
 class PitStop(BaseModel):

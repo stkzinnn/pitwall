@@ -134,6 +134,7 @@ def _build_laps(laps_df: pd.DataFrame) -> list[Lap]:
                 compound=row.Compound if isinstance(row.Compound, str) else None,
                 tyre_life=_to_int(row.TyreLife),
                 position=_to_int(row.Position),
+                track_status=row.TrackStatus if isinstance(row.TrackStatus, str) else None,
             )
         )
     return laps

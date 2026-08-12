@@ -44,6 +44,7 @@ def _row(driver: str = "VER", lap_number: int = 1, stint: float = 1.0) -> dict:
         "Compound": "MEDIUM",
         "TyreLife": float(lap_number),
         "Position": 1.0,
+        "TrackStatus": "1",
     }
 
 

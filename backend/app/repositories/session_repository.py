@@ -49,6 +49,7 @@ async def save_session(db: AsyncSession, session_data: SessionData) -> None:
             compound=lap.compound,
             tyre_life=lap.tyre_life,
             position=lap.position,
+            track_status=lap.track_status,
         )
         for lap in session_data.laps
     ]
@@ -99,6 +100,7 @@ async def get_session(
                 compound=lap.compound,
                 tyre_life=lap.tyre_life,
                 position=lap.position,
+                track_status=lap.track_status,
             )
             for lap in race_session.laps
         ],

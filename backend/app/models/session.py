@@ -52,6 +52,7 @@ class Lap(Base):
     compound: Mapped[str | None] = mapped_column(String(16), nullable=True)
     tyre_life: Mapped[int | None] = mapped_column(Integer, nullable=True)
     position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    track_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     session: Mapped[RaceSession] = relationship(back_populates="laps")
 

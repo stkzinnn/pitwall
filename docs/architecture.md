@@ -112,10 +112,13 @@ serviço de observabilidade (logging estruturado + métricas).
    `GET /races/{year}/{round}` lê primeiro da base de dados (PostgreSQL via
    `asyncpg`) e só recorre ao FastF1 — gravando o resultado — se a corrida
    ainda não tiver sido ingerida. Postgres local via `docker-compose.yml`.
-4. **Fase 3 — Motor de simulação (v1 simples):** dado um conjunto de voltas
-   reais (pace por piloto/composto), simular uma estratégia alternativa
-   (nº de paragens, volta da paragem, composto) e devolver tempo total
-   estimado + posição estimada.
+4. ✅ **Fase 3 — Motor de simulação (v1 simples):** ritmo base + degradação
+   por (piloto, composto) via regressão linear sobre as voltas reais
+   (`simulation/pace_model.py`), custo médio de pit stop
+   (`simulation/pitstop_model.py`), `simulate_strategy` a somar isto por
+   stint da estratégia alternativa (`simulation/engine.py`), e endpoint
+   `POST /api/v1/simulate` a comparar com o tempo real do piloto. Sem dados
+   suficientes para um composto → excluído da estimativa, nunca inventado.
 5. **Fase 4 — Comparação:** endpoint que compara a estratégia real extraída
    dos dados vs. uma ou mais estratégias simuladas, incluindo o impacto de
    safety cars / clima já observados na corrida.

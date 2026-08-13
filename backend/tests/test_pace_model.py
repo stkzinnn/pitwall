@@ -1,6 +1,7 @@
 import pytest
 
 from app.schemas.session import Lap, Stint
+from app.simulation.fuel_model import ZERO_FUEL_EFFECT_CONFIG
 from app.simulation.pace_model import (
     _linear_regression,
     average_pace_model,
@@ -8,11 +9,27 @@ from app.simulation.pace_model import (
     compute_stint_pace,
 )
 
+# These tests are about the degradation/regression/outlier-filtering math
+# itself, not about fuel — pass a zero-effect fuel config throughout so the
+# hand-computed expected values in this file aren't also entangled with
+# fuel correction (which is tested on its own in test_fuel_model.py).
+# total_laps only matters when the fuel effect is non-zero, so any value
+# works here.
+_TOTAL_LAPS = 100
+
 
 def _lap(lap_number: int, lap_time_seconds: float | None, compound: str = "SOFT") -> Lap:
     return Lap(
         driver="VER", lap_number=lap_number, lap_time_seconds=lap_time_seconds, compound=compound
     )
+
+
+def _compute_stint_pace(stint_laps: list[Lap]):
+    return compute_stint_pace(stint_laps, _TOTAL_LAPS, ZERO_FUEL_EFFECT_CONFIG)
+
+
+def _build_driver_stint_pace_models(laps: list[Lap], stints: list[Stint]):
+    return build_driver_stint_pace_models(laps, stints, _TOTAL_LAPS, ZERO_FUEL_EFFECT_CONFIG)
 
 
 def test_compute_stint_pace_fits_known_linear_degradation() -> None:
@@ -25,7 +42,7 @@ def test_compute_stint_pace_fits_known_linear_degradation() -> None:
         _lap(5, 90.3),
     ]
 
-    pace = compute_stint_pace(stint_laps)
+    pace = _compute_stint_pace(stint_laps)
 
     assert pace is not None
     assert pace.base_pace_seconds == pytest.approx(90.0)
@@ -38,7 +55,7 @@ def test_compute_stint_pace_returns_none_for_too_few_valid_laps() -> None:
     # Out lap + only 2 clean laps: below MIN_VALID_LAPS_FOR_DEGRADATION (3).
     stint_laps = [_lap(1, 105.0), _lap(2, 90.0), _lap(3, 90.1)]
 
-    assert compute_stint_pace(stint_laps) is None
+    assert _compute_stint_pace(stint_laps) is None
 
 
 def test_compute_stint_pace_ignores_laps_with_missing_lap_time() -> None:
@@ -52,7 +69,7 @@ def test_compute_stint_pace_ignores_laps_with_missing_lap_time() -> None:
         _lap(5, 90.4),
     ]
 
-    pace = compute_stint_pace(stint_laps)
+    pace = _compute_stint_pace(stint_laps)
 
     assert pace is not None
     assert pace.laps_used == 3
@@ -75,7 +92,7 @@ def test_compute_stint_pace_excludes_mid_stint_outliers_like_a_vsc() -> None:
         _lap(9, 90.7),
     ]
 
-    pace = compute_stint_pace(stint_laps)
+    pace = _compute_stint_pace(stint_laps)
 
     assert pace is not None
     # 2 outliers excluded from the 8 clean laps -> 6 laps used.
@@ -98,7 +115,7 @@ def test_compute_stint_pace_returns_none_if_outlier_filtering_leaves_too_few_lap
         _lap(4, 500.0),
     ]
 
-    assert compute_stint_pace(stint_laps) is None
+    assert _compute_stint_pace(stint_laps) is None
 
 
 def test_compute_stint_pace_reproduces_the_mean_of_its_own_fitted_laps() -> None:
@@ -118,7 +135,7 @@ def test_compute_stint_pace_reproduces_the_mean_of_its_own_fitted_laps() -> None
     ]
     real_sum = 91.0 + 90.3 + 89.9 + 90.4
 
-    pace = compute_stint_pace(stint_laps)
+    pace = _compute_stint_pace(stint_laps)
 
     assert pace is not None
     assert pace.laps_used == 4
@@ -158,7 +175,7 @@ def test_build_driver_stint_pace_models_keeps_repeated_compounds_separate() -> N
         Stint(driver="VER", stint_number=3, compound="SOFT", start_lap=9, end_lap=12),
     ]
 
-    stint_pace_models = build_driver_stint_pace_models(laps, stints)
+    stint_pace_models = _build_driver_stint_pace_models(laps, stints)
 
     assert [(m.stint_number, m.compound) for m in stint_pace_models] == [
         (1, "SOFT"),
@@ -190,7 +207,7 @@ def test_build_driver_stint_pace_models_skips_stints_with_no_compound_recorded()
         Stint(driver="VER", stint_number=1, compound=None, start_lap=1, end_lap=4),
     ]
 
-    assert build_driver_stint_pace_models(laps, stints) == []
+    assert _build_driver_stint_pace_models(laps, stints) == []
 
 
 def test_average_pace_model_averages_across_valid_models_only() -> None:
@@ -208,7 +225,7 @@ def test_average_pace_model_averages_across_valid_models_only() -> None:
         Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4),
         Stint(driver="VER", stint_number=2, compound="SOFT", start_lap=5, end_lap=8),
     ]
-    stint_pace_models = build_driver_stint_pace_models(laps, stints)
+    stint_pace_models = _build_driver_stint_pace_models(laps, stints)
 
     average = average_pace_model([m.pace for m in stint_pace_models])
 

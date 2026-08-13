@@ -1,8 +1,14 @@
 import pytest
 
 from app.schemas.session import Lap, Stint
+from app.simulation.fuel_model import ZERO_FUEL_EFFECT_CONFIG
 from app.simulation.pace_model import build_driver_stint_pace_models
 from app.simulation.safety_car import calculate_safety_car_time_lost, is_safety_car_lap
+
+# These tests are about safety car detection/grouping, not fuel — use a
+# zero-effect fuel config so the hand-computed expected values aren't also
+# entangled with fuel correction (tested separately in test_fuel_model.py).
+_TOTAL_LAPS = 100
 
 
 def _lap(lap_number: int, lap_time_seconds: float, track_status: str = "1") -> Lap:
@@ -12,6 +18,16 @@ def _lap(lap_number: int, lap_time_seconds: float, track_status: str = "1") -> L
         lap_time_seconds=lap_time_seconds,
         compound="SOFT",
         track_status=track_status,
+    )
+
+
+def _build_driver_stint_pace_models(laps: list[Lap], stints: list[Stint]):
+    return build_driver_stint_pace_models(laps, stints, _TOTAL_LAPS, ZERO_FUEL_EFFECT_CONFIG)
+
+
+def _calculate_safety_car_time_lost(laps, stints, stint_pace_models):
+    return calculate_safety_car_time_lost(
+        laps, stints, stint_pace_models, _TOTAL_LAPS, ZERO_FUEL_EFFECT_CONFIG
     )
 
 
@@ -38,7 +54,7 @@ def test_calculate_safety_car_time_lost_for_a_single_affected_lap() -> None:
         _lap(6, 90.4),
     ]
     stint = Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=6)
-    stint_pace_models = build_driver_stint_pace_models(stint_laps, [stint])
+    stint_pace_models = _build_driver_stint_pace_models(stint_laps, [stint])
 
     # Sanity-check the fitted model first (base=90.0, degradation=0.1,
     # matching the surrounding clean laps once the VSC lap is excluded as
@@ -48,7 +64,7 @@ def test_calculate_safety_car_time_lost_for_a_single_affected_lap() -> None:
     assert pace.base_pace_seconds == pytest.approx(90.0)
     assert pace.degradation_seconds_per_lap == pytest.approx(0.1, abs=1e-9)
 
-    periods = calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models)
+    periods = _calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models)
 
     assert len(periods) == 1
     assert periods[0].laps == [4]
@@ -69,9 +85,9 @@ def test_calculate_safety_car_time_lost_groups_consecutive_laps_into_one_period(
         _lap(7, 90.5),
     ]
     stint = Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=7)
-    stint_pace_models = build_driver_stint_pace_models(stint_laps, [stint])
+    stint_pace_models = _build_driver_stint_pace_models(stint_laps, [stint])
 
-    periods = calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models)
+    periods = _calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models)
 
     assert len(periods) == 1
     assert periods[0].laps == [4, 5]
@@ -90,9 +106,9 @@ def test_calculate_safety_car_time_lost_splits_non_consecutive_laps_into_separat
         _lap(8, 90.6),
     ]
     stint = Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=8)
-    stint_pace_models = build_driver_stint_pace_models(stint_laps, [stint])
+    stint_pace_models = _build_driver_stint_pace_models(stint_laps, [stint])
 
-    periods = calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models)
+    periods = _calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models)
 
     assert [period.laps for period in periods] == [[3], [7]]
 
@@ -100,9 +116,9 @@ def test_calculate_safety_car_time_lost_splits_non_consecutive_laps_into_separat
 def test_calculate_safety_car_time_lost_returns_empty_list_when_no_sc_laps() -> None:
     stint_laps = [_lap(1, 105.0), _lap(2, 90.0), _lap(3, 90.1), _lap(4, 90.2), _lap(5, 90.3)]
     stint = Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=5)
-    stint_pace_models = build_driver_stint_pace_models(stint_laps, [stint])
+    stint_pace_models = _build_driver_stint_pace_models(stint_laps, [stint])
 
-    assert calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models) == []
+    assert _calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models) == []
 
 
 def test_calculate_safety_car_time_lost_ignores_stints_without_a_reliable_pace_model() -> None:
@@ -111,10 +127,10 @@ def test_calculate_safety_car_time_lost_ignores_stints_without_a_reliable_pace_m
     # rather than guessed.
     stint_laps = [_lap(1, 105.0), _lap(2, 90.0), _lap(3, 130.0, track_status="4")]
     stint = Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=3)
-    stint_pace_models = build_driver_stint_pace_models(stint_laps, [stint])
+    stint_pace_models = _build_driver_stint_pace_models(stint_laps, [stint])
 
     assert stint_pace_models[0].pace is None
-    assert calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models) == []
+    assert _calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models) == []
 
 
 def test_calculate_safety_car_time_lost_ignores_the_stints_opening_lap() -> None:
@@ -127,6 +143,6 @@ def test_calculate_safety_car_time_lost_ignores_the_stints_opening_lap() -> None
         _lap(4, 90.2),
     ]
     stint = Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4)
-    stint_pace_models = build_driver_stint_pace_models(stint_laps, [stint])
+    stint_pace_models = _build_driver_stint_pace_models(stint_laps, [stint])
 
-    assert calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models) == []
+    assert _calculate_safety_car_time_lost(stint_laps, [stint], stint_pace_models) == []

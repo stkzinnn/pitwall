@@ -2,6 +2,11 @@ import statistics
 from dataclasses import dataclass
 
 from app.schemas.session import Lap, Stint
+from app.simulation.fuel_model import (
+    DEFAULT_FUEL_MODEL_CONFIG,
+    FuelModelConfig,
+    fuel_correction_seconds,
+)
 
 # Abaixo deste número de voltas utilizáveis (cronometradas, sem contar a
 # volta de saída, e sem contar outliers excluídos), um ajuste linear não é
@@ -26,9 +31,10 @@ class PaceModel:
     base_pace_seconds: float
     degradation_seconds_per_lap: float
     laps_used: int
-    # Valor bruto da primeira volta limpa do stint, guardado só para
-    # referência/debug — NÃO é usado na fórmula do motor (ver engine.py),
-    # que usa antes o intercepto da regressão (base_pace_seconds).
+    # Valor bruto (SEM correção de combustível) da primeira volta limpa do
+    # stint, guardado só para referência/debug — NÃO é usado na fórmula do
+    # motor (ver engine.py), que usa antes o intercepto da regressão
+    # (base_pace_seconds), já corrigido de combustível.
     first_clean_lap_seconds: float
 
 
@@ -44,7 +50,11 @@ class StintPaceModel:
     pace: PaceModel | None
 
 
-def compute_stint_pace(stint_laps: list[Lap]) -> PaceModel | None:
+def compute_stint_pace(
+    stint_laps: list[Lap],
+    total_laps: int,
+    fuel_config: FuelModelConfig = DEFAULT_FUEL_MODEL_CONFIG,
+) -> PaceModel | None:
     """Estima o ritmo base e a degradação por volta de um stint (um
     piloto, um composto), a partir das voltas desse stint ordenadas por
     lap_number.
@@ -57,15 +67,25 @@ def compute_stint_pace(stint_laps: list[Lap]) -> PaceModel | None:
     ritmo base e o declive de degradação para valores mais baixos do que
     deviam ser.
 
-    Entre as voltas restantes, qualquer volta cujo tempo seja um outlier
-    estatístico do stint (ver OUTLIER_STD_DEV_THRESHOLD) é também excluída
-    do ajuste — tipicamente voltas sob safety car / VSC, que não refletem
-    o ritmo real do piloto nem a degradação do pneu.
+    Antes de ajustar a regressão, cada tempo de volta é corrigido do efeito
+    do peso de combustível (ver fuel_model.py), usando o número de volta
+    ABSOLUTO na corrida (`lap.lap_number`), não a posição dentro do stint —
+    o nível de combustível depende de quanto da corrida já foi percorrida,
+    não de quando foi a última paragem. Sem esta correção, a degradação
+    medida misturaria "pneu a piorar" com "carro a ficar mais leve",
+    subestimando a degradação real do pneu.
 
-    O ritmo base devolvido é o INTERCEPTO da reta ajustada por regressão
-    (o valor previsto pela reta na posição 0 do stint), não o valor bruto
-    da primeira volta — a reta ajustada representa melhor a tendência real
-    do stint do que um único ponto, que pode ele próprio ter ruído.
+    Entre as voltas restantes (já corrigidas), qualquer volta cujo tempo
+    seja um outlier estatístico do stint (ver OUTLIER_STD_DEV_THRESHOLD) é
+    também excluída do ajuste — tipicamente voltas sob safety car / VSC,
+    que não refletem o ritmo real do piloto nem a degradação do pneu.
+
+    O ritmo base devolvido (base_pace_seconds) é o INTERCEPTO da reta
+    ajustada por regressão às voltas já corrigidas de combustível — ou
+    seja, representa o ritmo "puro" (só pneu) que o piloto teria no fim da
+    corrida (combustível mínimo, ver fuel_model.fuel_correction_seconds),
+    não o valor bruto da primeira volta nem o ritmo com combustível a
+    bordo.
 
     Devolve None se sobrarem menos de MIN_VALID_LAPS_FOR_DEGRADATION
     voltas válidas depois de excluir a volta de saída e os outliers: uma
@@ -78,9 +98,15 @@ def compute_stint_pace(stint_laps: list[Lap]) -> PaceModel | None:
         return None
 
     positions_in_stint = [position for position, _ in positioned_laps]
-    lap_times = [lap.lap_time_seconds for _, lap in positioned_laps]
+    raw_lap_times = [lap.lap_time_seconds for _, lap in positioned_laps]
+    fuel_corrected_lap_times = [
+        lap.lap_time_seconds - fuel_correction_seconds(lap.lap_number, total_laps, fuel_config)
+        for _, lap in positioned_laps
+    ]
 
-    filtered_positions, filtered_times = _exclude_outlier_laps(positions_in_stint, lap_times)
+    filtered_positions, filtered_times = _exclude_outlier_laps(
+        positions_in_stint, fuel_corrected_lap_times
+    )
 
     if len(filtered_times) < MIN_VALID_LAPS_FOR_DEGRADATION:
         return None
@@ -91,7 +117,7 @@ def compute_stint_pace(stint_laps: list[Lap]) -> PaceModel | None:
         base_pace_seconds=intercept,
         degradation_seconds_per_lap=slope,
         laps_used=len(filtered_times),
-        first_clean_lap_seconds=lap_times[0],
+        first_clean_lap_seconds=raw_lap_times[0],
     )
 
 
@@ -147,7 +173,10 @@ def _exclude_outlier_laps(
 
 
 def build_driver_stint_pace_models(
-    driver_laps: list[Lap], driver_stints: list[Stint]
+    driver_laps: list[Lap],
+    driver_stints: list[Stint],
+    total_laps: int,
+    fuel_config: FuelModelConfig = DEFAULT_FUEL_MODEL_CONFIG,
 ) -> list[StintPaceModel]:
     """Um StintPaceModel por stint real do piloto (por ordem cronológica),
     cada um com o seu próprio PaceModel ajustado de forma independente.
@@ -161,6 +190,11 @@ def build_driver_stint_pace_models(
     posicionalmente a um stint real (mesmo índice, mesmo composto) usam o
     PaceModel exato desse stint; caso contrário usa-se um fallback
     agregado (ver average_pace_model).
+
+    `total_laps` é o total de voltas da CORRIDA (não do stint) — necessário
+    para a correção de combustível em compute_stint_pace(). Deve ser o
+    mesmo valor usado depois em engine.py para simular, e em
+    safety_car.py para quantificar tempo perdido: ver fuel_model.py.
     """
     laps_by_number = {lap.lap_number: lap for lap in driver_laps}
     stint_pace_models: list[StintPaceModel] = []
@@ -178,7 +212,7 @@ def build_driver_stint_pace_models(
             StintPaceModel(
                 stint_number=stint.stint_number,
                 compound=stint.compound,
-                pace=compute_stint_pace(stint_laps),
+                pace=compute_stint_pace(stint_laps, total_laps, fuel_config),
             )
         )
 

@@ -23,6 +23,11 @@ from dataclasses import dataclass
 
 from app.schemas.session import Lap, Stint
 from app.schemas.simulation import SafetyCarPeriod
+from app.simulation.fuel_model import (
+    DEFAULT_FUEL_MODEL_CONFIG,
+    FuelModelConfig,
+    fuel_correction_seconds,
+)
 from app.simulation.pace_model import StintPaceModel, positioned_clean_laps
 
 # Códigos de TrackStatus do FastF1 considerados "sob safety car" para este
@@ -56,21 +61,33 @@ def calculate_safety_car_time_lost(
     driver_laps: list[Lap],
     driver_stints: list[Stint],
     stint_pace_models: list[StintPaceModel],
+    total_laps: int,
+    fuel_config: FuelModelConfig = DEFAULT_FUEL_MODEL_CONFIG,
 ) -> list[SafetyCarPeriod]:
     """Identifica as voltas do piloto marcadas como sob safety car/VSC e
     estima quanto tempo perdeu em cada uma, agrupando voltas consecutivas
     num só período.
 
     Para cada volta sob safety car: tempo_perdido = tempo_real_da_volta −
-    ritmo_normal_esperado_nessa_posição_do_stint (base_pace + degradação ×
-    posição, usando o PaceModel desse stint). Só é possível quantificar
-    voltas com um PaceModel fiável para o stint a que pertencem (stints
-    sem dados suficientes — ver pace_model.compute_stint_pace — são
-    ignorados, não geram um número inventado) e que não sejam a própria
-    volta de saída do stint (essa já não tem uma "posição" no sistema de
-    coordenadas da regressão — ver pace_model.positioned_clean_laps — e a
-    sua lentidão structural de saída de boxes tornaria impossível separar
-    o efeito do safety car do efeito normal de uma volta de saída).
+    ritmo_normal_esperado_nessa_posição_do_stint. O "ritmo normal esperado"
+    tem duas partes: o ritmo puro de pneu do stint (base_pace + degradação
+    × posição, usando o PaceModel desse stint, já corrigido de
+    combustível — ver pace_model.compute_stint_pace) MAIS a correção de
+    combustível dessa volta em concreto (ver fuel_model.py), porque
+    tempo_real_da_volta inclui o efeito real do combustível a bordo nessa
+    altura da corrida e não seria justo comparar contra um ritmo "de fim
+    de corrida". `total_laps`/`fuel_config` têm de ser os MESMOS usados
+    para construir `stint_pace_models`, para a comparação ser consistente
+    (ver engine.simulate_strategy).
+
+    Só é possível quantificar voltas com um PaceModel fiável para o stint
+    a que pertencem (stints sem dados suficientes — ver
+    pace_model.compute_stint_pace — são ignorados, não geram um número
+    inventado) e que não sejam a própria volta de saída do stint (essa já
+    não tem uma "posição" no sistema de coordenadas da regressão — ver
+    pace_model.positioned_clean_laps — e a sua lentidão estrutural de
+    saída de boxes tornaria impossível separar o efeito do safety car do
+    efeito normal de uma volta de saída).
     """
     laps_by_number = {lap.lap_number: lap for lap in driver_laps}
     pace_by_stint_number = {model.stint_number: model.pace for model in stint_pace_models}
@@ -92,8 +109,11 @@ def calculate_safety_car_time_lost(
             if not is_safety_car_lap(lap.track_status):
                 continue
 
-            expected_pace_seconds = (
+            pure_tyre_pace_seconds = (
                 pace.base_pace_seconds + pace.degradation_seconds_per_lap * position
+            )
+            expected_pace_seconds = pure_tyre_pace_seconds + fuel_correction_seconds(
+                lap.lap_number, total_laps, fuel_config
             )
             # lap.lap_time_seconds is guaranteed non-None here: it's a
             # precondition of appearing in positioned_clean_laps().

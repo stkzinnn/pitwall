@@ -22,11 +22,18 @@ HISTORY:
   stints (see pace_model.py), the replay closed to ~-23s.
 - That remaining ~23s was the real time VER lost to the VSC — correctly
   excluded from the "clean pace" fit, but still part of his real total,
-  and the engine had no way to add it back. Now that
-  simulate_strategy() adds the measured Safety Car/VSC time lost back
-  onto the estimate (see safety_car.py) — because that time would have
-  been lost under ANY strategy, it's not something changing tyre
-  strategy could have avoided — the replay closes to ~+7s.
+  and the engine had no way to add it back. Once simulate_strategy()
+  started adding the measured Safety Car/VSC time lost back onto the
+  estimate (see safety_car.py) — because that time would have been lost
+  under ANY strategy, it's not something changing tyre strategy could
+  have avoided — the replay closed to ~+7.4s.
+- Lap times were still measured with the "car gets lighter as it burns
+  fuel" effect mixed into the tyre degradation regression, biasing it low
+  (e.g. VER's HARD stint fit at ~-0.06 s/lap — tyres "getting faster" with
+  age, still not physically real, just less wrong than before). Now that
+  pace_model.compute_stint_pace() corrects for fuel load before fitting,
+  and engine.py adds the fuel effect back per simulated lap (see
+  fuel_model.py), the replay closes further to ~+4.3s.
 """
 
 import pytest
@@ -36,10 +43,11 @@ from app.schemas.simulation import StintPlan
 from app.simulation.engine import simulate_strategy
 from app.simulation.pitstop_model import calculate_average_pit_stop_cost
 
-# Confirmed empirically at ~+7.4s (see HISTORY above) after the Safety
-# Car/VSC compensation was added. 10s leaves a small margin while still
-# catching a regression back toward the old ~23s (or ~90s / ~340s) gap.
-MAX_PLAUSIBLE_REPLAY_DIFFERENCE_SECONDS = 10.0
+# Confirmed empirically at ~+4.3s (see HISTORY above) after the fuel
+# correction was added, down from ~+7.4s. 8s leaves a small margin while
+# still catching a regression back toward the old ~23s (or ~90s / ~340s)
+# gap.
+MAX_PLAUSIBLE_REPLAY_DIFFERENCE_SECONDS = 8.0
 
 
 @pytest.mark.integration

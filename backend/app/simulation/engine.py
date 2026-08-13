@@ -1,5 +1,10 @@
 from app.schemas.session import Lap, Stint
 from app.schemas.simulation import SafetyCarPeriod, SimulationResult, StintPlan
+from app.simulation.fuel_model import (
+    DEFAULT_FUEL_MODEL_CONFIG,
+    FuelModelConfig,
+    fuel_correction_seconds,
+)
 from app.simulation.pace_model import (
     PaceModel,
     StintPaceModel,
@@ -15,6 +20,7 @@ def simulate_strategy(
     real_stints: list[Stint],
     strategy: list[StintPlan],
     pit_stop_cost: float,
+    fuel_config: FuelModelConfig = DEFAULT_FUEL_MODEL_CONFIG,
 ) -> SimulationResult:
     """Estima o tempo total de corrida para uma estratégia alternativa,
     usando modelos de ritmo ajustados às voltas reais deste piloto na
@@ -38,6 +44,15 @@ def simulate_strategy(
     stint é excluído do total (não é adivinhado), e um aviso indica qual o
     stint e o motivo.
 
+    Cada PaceModel já representa ritmo "puro" de pneu, corrigido do efeito
+    de combustível (ver fuel_model.py e pace_model.compute_stint_pace).
+    Para reconstruir um tempo de volta REALISTA para a corrida simulada,
+    soma-se de volta a correção de combustível correspondente ao número de
+    volta ABSOLUTO nessa corrida simulada (contagem acumulada ao longo de
+    toda a estratégia, não a posição dentro do stint) — a mesma convenção
+    usada para medir a degradação, só que invertida (ver
+    fuel_model.fuel_correction_seconds).
+
     À estimativa é ainda somado o tempo real perdido em Safety Car/VSC na
     corrida real (ver simulation.safety_car) — esses períodos ocorreriam
     de qualquer forma, independentemente da estratégia escolhida, por isso
@@ -47,16 +62,33 @@ def simulate_strategy(
     """
     warnings: list[str] = []
 
+    total_laps = max((lap.lap_number for lap in driver_laps), default=0)
+
     real_total_time_seconds = _sum_real_lap_times(driver_laps, warnings)
-    real_stint_models = build_driver_stint_pace_models(driver_laps, real_stints)
-    safety_car_periods = calculate_safety_car_time_lost(driver_laps, real_stints, real_stint_models)
+    real_stint_models = build_driver_stint_pace_models(
+        driver_laps, real_stints, total_laps, fuel_config
+    )
+    safety_car_periods = calculate_safety_car_time_lost(
+        driver_laps, real_stints, real_stint_models, total_laps, fuel_config
+    )
     safety_car_time_added_seconds = sum(period.time_lost_seconds for period in safety_car_periods)
 
     estimated_total_time_seconds = 0.0
     computed_stints = 0
     skipped_stints = 0
+    race_lap_counter = 0
 
     for index, stint_plan in enumerate(strategy):
+        # Every stint (including the first) has an opening lap — the
+        # standing-start lap for the very first stint, the pit-out lap for
+        # every stint after — that consumes a race lap NUMBER but is never
+        # itself simulated (StintPlan.number_of_laps only counts "clean"
+        # laps, matching how pace_model.compute_stint_pace fits real
+        # stints — see positioned_clean_laps). The counter has to advance
+        # for it too, or every clean lap after the 1st stint would be
+        # matched against the wrong (earlier) point in the fuel curve.
+        race_lap_counter += 1
+
         pace = _select_pace_model(index, stint_plan, real_stint_models)
 
         if pace is None:
@@ -65,12 +97,22 @@ def simulate_strategy(
                 f"Composto {stint_plan.compound!r} sem dados suficientes para "
                 f"{driver} nesta corrida; stint {index + 1} excluído da estimativa."
             )
+            # As voltas acontecem na corrida na mesma (só não conseguimos
+            # estimar o seu ritmo de pneu) — o contador tem de avançar
+            # para as correções de combustível dos stints seguintes
+            # continuarem corretas.
+            race_lap_counter += stint_plan.number_of_laps
             continue
 
-        estimated_total_time_seconds += sum(
-            pace.base_pace_seconds + pace.degradation_seconds_per_lap * lap_index
-            for lap_index in range(stint_plan.number_of_laps)
-        )
+        stint_time_seconds = 0.0
+        for lap_index in range(stint_plan.number_of_laps):
+            race_lap_counter += 1
+            pure_tyre_pace = pace.base_pace_seconds + pace.degradation_seconds_per_lap * lap_index
+            stint_time_seconds += pure_tyre_pace + fuel_correction_seconds(
+                race_lap_counter, total_laps, fuel_config
+            )
+
+        estimated_total_time_seconds += stint_time_seconds
         computed_stints += 1
 
     number_of_pit_stops = max(len(strategy) - 1, 0)

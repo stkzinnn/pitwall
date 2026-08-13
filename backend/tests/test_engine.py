@@ -2,7 +2,19 @@ import pytest
 
 from app.schemas.session import Lap, Stint
 from app.schemas.simulation import StintPlan
-from app.simulation.engine import simulate_strategy
+from app.simulation.engine import simulate_strategy as _simulate_strategy
+from app.simulation.fuel_model import ZERO_FUEL_EFFECT_CONFIG
+
+# These tests are about pace/pit-stop/safety-car logic, not fuel — pin a
+# zero-effect fuel config throughout so the hand-computed expected values
+# in this file aren't also entangled with fuel correction (which is tested
+# on its own in test_fuel_model.py, plus the measurement<->simulation
+# consistency test there).
+
+
+def simulate_strategy(**kwargs):
+    kwargs.setdefault("fuel_config", ZERO_FUEL_EFFECT_CONFIG)
+    return _simulate_strategy(**kwargs)
 
 
 def _lap(
@@ -192,3 +204,54 @@ def test_simulate_strategy_adds_safety_car_time_lost_to_the_estimate() -> None:
 
     assert any("Safety Car" in warning for warning in result.warnings)
     assert any("4" in warning for warning in result.warnings)
+
+
+def test_simulate_strategy_replay_is_consistent_with_real_fuel_effect_enabled() -> None:
+    """End-to-end version of the measurement<->simulation consistency
+    check in test_fuel_model.py, but through the public simulate_strategy
+    API with the REAL (non-zero) default fuel config: replaying a stint
+    with a known pure-tyre trend, with the fuel effect baked into the raw
+    lap times (as FastF1 would have recorded them), must reproduce the
+    original total of the SAME laps closely — proving measurement
+    (subtract fuel) and simulation (add fuel back) use the same convention
+    end-to-end, including engine.py's running race_lap_counter, not just
+    at the pace_model level.
+
+    Compared against the sum of the 5 "clean" laps only (excluding the
+    out lap, lap 1) — not against real_total_time_seconds, which sums all
+    6 laps including the out lap. simulate_strategy's estimate never
+    models an out-lap penalty for a StintPlan (a separate, pre-existing
+    modeling gap, out of scope here), so comparing against the full real
+    total would conflate that with what this test actually targets: fuel
+    convention consistency.
+    """
+    from app.simulation.fuel_model import DEFAULT_FUEL_MODEL_CONFIG, fuel_correction_seconds
+
+    pure_tyre_times = [95.0, 90.0, 90.1, 90.2, 90.3, 90.4]  # index 0 = out lap
+    # engine.simulate_strategy derives total_laps from max(driver_laps'
+    # lap_number) — must match that here (6 laps, this synthetic stint IS
+    # the whole "race") for the fuel convention to be consistent.
+    total_laps = len(pure_tyre_times)
+    driver_laps = [
+        _lap(
+            lap_number=i + 1,
+            lap_time_seconds=pure_time
+            + fuel_correction_seconds(i + 1, total_laps, DEFAULT_FUEL_MODEL_CONFIG),
+        )
+        for i, pure_time in enumerate(pure_tyre_times)
+    ]
+    real_stints = [Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=6)]
+    strategy = [StintPlan(compound="SOFT", number_of_laps=5)]
+
+    result = _simulate_strategy(
+        driver="VER",
+        driver_laps=driver_laps,
+        real_stints=real_stints,
+        strategy=strategy,
+        pit_stop_cost=25.0,
+        fuel_config=DEFAULT_FUEL_MODEL_CONFIG,
+    )
+
+    original_clean_laps_sum = sum(lap.lap_time_seconds for lap in driver_laps[1:])
+    assert result.estimated_total_time_seconds is not None
+    assert result.estimated_total_time_seconds == pytest.approx(original_clean_laps_sum, abs=1e-6)

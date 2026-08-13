@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StintPlan(BaseModel):
@@ -38,3 +38,50 @@ class SimulationResult(BaseModel):
     safety_car_time_added_seconds: float = 0.0
     safety_car_periods: list[SafetyCarPeriod] = []
     warnings: list[str] = []
+
+
+class NamedStrategy(BaseModel):
+    """Uma estratégia candidata identificada por um rótulo, para aparecer
+    com esse nome no resultado de POST /api/v1/compare (ex.: "A", "1 stop
+    soft-hard")."""
+
+    label: str
+    strategy: list[StintPlan]
+
+
+class ComparisonRequest(BaseModel):
+    driver: str
+    year: int
+    round: int
+    session_type: str = "R"
+    # min_length=1: uma lista vazia não tem nada para comparar — a
+    # validação do Pydantic já devolve 422 sozinha, sem precisar de
+    # tratamento explícito no endpoint (ver api/v1/compare.py).
+    strategies: list[NamedStrategy] = Field(min_length=1)
+
+
+class StrategyComparisonEntry(BaseModel):
+    label: str
+    result: SimulationResult
+    # None quando result.estimated_total_time_seconds também é None (a
+    # estratégia não pôde ser estimada de todo) — não há um número válido
+    # para calcular a diferença. Ver comparison.py.
+    delta_to_best_seconds: float | None = None
+    # Espelha `bool(result.warnings)`, exposto como campo próprio para o
+    # cliente não ter de inspecionar a lista de warnings só para saber se
+    # deve desconfiar do número (ver comparison.py).
+    has_warnings: bool = False
+
+
+class ComparisonResult(BaseModel):
+    driver: str
+    year: int
+    round: int
+    session_type: str
+    # None só se NENHUMA estratégia da lista pôde ser estimada.
+    best_label: str | None = None
+    best_estimated_total_time_seconds: float | None = None
+    # Ordenada por estimated_total_time_seconds crescente; estratégias sem
+    # estimativa numérica ficam sempre no fim, por ordem de submissão — ver
+    # comparison.compare_strategies.
+    strategies: list[StrategyComparisonEntry] = []

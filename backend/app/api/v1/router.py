@@ -1,11 +1,13 @@
 from fastapi import APIRouter
 
+from app.api.v1.compare import router as compare_router
 from app.api.v1.races import router as races_router
 from app.api.v1.simulate import router as simulate_router
 
 router = APIRouter()
 router.include_router(races_router)
 router.include_router(simulate_router)
+router.include_router(compare_router)
 
 
 @router.get("/health", tags=["health"])

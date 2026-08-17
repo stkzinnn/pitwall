@@ -19,10 +19,21 @@ from app.data_sources.fastf1_client import load_session_data
 class FakeSession:
     """Stand-in for fastf1.core.Session, exposing only what the client uses."""
 
-    def __init__(self, laps_df: pd.DataFrame, event_name: str | None = "Fake Grand Prix") -> None:
+    def __init__(
+        self,
+        laps_df: pd.DataFrame,
+        event_name: str | None = "Fake Grand Prix",
+        country: str | None = None,
+        results_df: pd.DataFrame | None = None,
+        total_laps: int | None = None,
+    ) -> None:
         self.laps = laps_df
         if event_name is not None:
-            self.event = {"EventName": event_name}
+            self.event = {"EventName": event_name, "Country": country}
+        if results_df is not None:
+            self.results = results_df
+        if total_laps is not None:
+            self.total_laps = total_laps
 
     def load(self, **kwargs: object) -> None:
         pass
@@ -201,3 +212,115 @@ def test_laps_with_no_stint_number_are_excluded_from_stints(
     assert len(result.laps) == 2
     assert len(result.stints) == 1
     assert result.stints[0].start_lap == 1
+
+
+def test_country_and_total_laps_are_extracted(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = FakeSession(
+        _laps_df([_row("VER", lap_number=1, stint=1.0)]),
+        country="Bahrain",
+        total_laps=57,
+    )
+    _patch_get_session(monkeypatch, session)
+
+    result = load_session_data(year=2099, round=1, session_type="R")
+
+    assert result.country == "Bahrain"
+    assert result.total_laps == 57
+
+
+def test_country_and_total_laps_fall_back_to_none_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Older/incomplete sessions may not expose these — must degrade to
+    None, not raise."""
+    session = FakeSession(_laps_df([_row("VER", lap_number=1, stint=1.0)]))
+    _patch_get_session(monkeypatch, session)
+
+    result = load_session_data(year=2099, round=1, session_type="R")
+
+    assert result.country is None
+    assert result.total_laps is None
+
+
+def test_driver_info_is_extracted_from_session_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    laps = _laps_df(
+        [
+            _row("VER", lap_number=1, stint=1.0),
+            _row("HAM", lap_number=1, stint=1.0),
+        ]
+    )
+    results = pd.DataFrame(
+        [
+            {
+                "Abbreviation": "VER",
+                "FullName": "Max Verstappen",
+                "DriverNumber": "1",
+                "TeamName": "Red Bull Racing",
+            },
+            {
+                "Abbreviation": "HAM",
+                "FullName": "Lewis Hamilton",
+                "DriverNumber": "44",
+                "TeamName": "Mercedes",
+            },
+        ]
+    )
+    _patch_get_session(monkeypatch, FakeSession(laps, results_df=results))
+
+    result = load_session_data(year=2099, round=1, session_type="R")
+
+    assert len(result.drivers) == 2
+    by_code = {driver.code: driver for driver in result.drivers}
+    assert by_code["VER"].full_name == "Max Verstappen"
+    assert by_code["VER"].number == 1
+    assert by_code["VER"].team_name == "Red Bull Racing"
+    assert by_code["HAM"].full_name == "Lewis Hamilton"
+
+
+def test_driver_info_degrades_gracefully_when_results_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No session.results at all (e.g. very old/incomplete data): drivers
+    still show up (from the laps themselves), just with only `code`
+    populated — never dropped, never a crash."""
+    laps = _laps_df([_row("VER", lap_number=1, stint=1.0)])
+    _patch_get_session(monkeypatch, FakeSession(laps))
+
+    result = load_session_data(year=2099, round=1, session_type="R")
+
+    assert len(result.drivers) == 1
+    assert result.drivers[0].code == "VER"
+    assert result.drivers[0].full_name is None
+    assert result.drivers[0].number is None
+    assert result.drivers[0].team_name is None
+
+
+def test_driver_info_degrades_gracefully_for_driver_missing_from_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A driver present in laps but absent from results (partial/odd data)
+    still gets an entry, just with code only."""
+    laps = _laps_df(
+        [
+            _row("VER", lap_number=1, stint=1.0),
+            _row("HAM", lap_number=1, stint=1.0),
+        ]
+    )
+    results = pd.DataFrame(
+        [
+            {
+                "Abbreviation": "VER",
+                "FullName": "Max Verstappen",
+                "DriverNumber": "1",
+                "TeamName": "Red Bull Racing",
+            }
+        ]
+    )
+    _patch_get_session(monkeypatch, FakeSession(laps, results_df=results))
+
+    result = load_session_data(year=2099, round=1, session_type="R")
+
+    by_code = {driver.code: driver for driver in result.drivers}
+    assert by_code["VER"].full_name == "Max Verstappen"
+    assert by_code["HAM"].full_name is None
+    assert by_code["HAM"].code == "HAM"

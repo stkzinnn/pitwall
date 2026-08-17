@@ -28,10 +28,16 @@ async def test_get_race_session_returns_normalized_data() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["event_name"] == "Bahrain Grand Prix"
+    assert body["country"] == "Bahrain"
+    assert body["total_laps"] == 57
     assert body["data_complete"] is True
     assert len(body["laps"]) > 0
     assert len(body["stints"]) > 0
     assert len(body["pit_stops"]) > 0
+    assert len(body["drivers"]) > 0
+    ver = next(d for d in body["drivers"] if d["code"] == "VER")
+    assert ver["full_name"] == "Max Verstappen"
+    assert ver["team_name"] == "Red Bull Racing"
 
 
 @pytest.mark.integration

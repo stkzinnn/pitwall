@@ -8,7 +8,7 @@ import fastf1
 import pandas as pd
 
 from app.core.config import get_settings
-from app.schemas.session import Lap, PitStop, SessionData, Stint
+from app.schemas.session import DriverInfo, Lap, PitStop, SessionData, Stint
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,8 @@ def load_session_data(year: int, round: int, session_type: str = "R") -> Session
         ) from exc
 
     event_name = _event_name(session)
+    country = _country(session)
+    total_laps = _total_laps(session)
     laps_df = session.laps
 
     if laps_df is None or laps_df.empty:
@@ -62,9 +64,12 @@ def load_session_data(year: int, round: int, session_type: str = "R") -> Session
             round=round,
             session_type=session_type,
             event_name=event_name,
+            country=country,
+            total_laps=total_laps,
             laps=[],
             pit_stops=[],
             stints=[],
+            drivers=[],
             data_complete=False,
         )
 
@@ -94,9 +99,12 @@ def load_session_data(year: int, round: int, session_type: str = "R") -> Session
         round=round,
         session_type=session_type,
         event_name=event_name,
+        country=country,
+        total_laps=total_laps,
         laps=_build_laps(laps_df),
         pit_stops=_build_pit_stops(laps_df),
         stints=_build_stints(laps_df),
+        drivers=_build_drivers(session, laps_df),
         data_complete=data_complete,
     )
 
@@ -104,6 +112,21 @@ def load_session_data(year: int, round: int, session_type: str = "R") -> Session
 def _event_name(session: Any) -> str | None:
     try:
         return str(session.event["EventName"])
+    except Exception:
+        return None
+
+
+def _country(session: Any) -> str | None:
+    try:
+        value = session.event["Country"]
+        return str(value) if isinstance(value, str) and value else None
+    except Exception:
+        return None
+
+
+def _total_laps(session: Any) -> int | None:
+    try:
+        return _to_int(session.total_laps)
     except Exception:
         return None
 
@@ -189,3 +212,41 @@ def _build_stints(laps_df: pd.DataFrame) -> list[Stint]:
         )
 
     return stints
+
+
+def _build_drivers(session: Any, laps_df: pd.DataFrame) -> list[DriverInfo]:
+    """One DriverInfo per driver who has laps in this session, in their
+    first-appearance order in the laps data. Name/number/team come from
+    session.results (a separate FastF1 dataset, keyed by driver code) when
+    available; a driver missing from results (or a session with no usable
+    results at all — e.g. very old/incomplete data) still gets an entry,
+    just with those fields as None rather than dropping the driver or
+    raising.
+    """
+    driver_codes: list[str] = []
+    seen: set[str] = set()
+    for code in laps_df["Driver"]:
+        if code not in seen:
+            seen.add(code)
+            driver_codes.append(code)
+
+    info_by_code: dict[str, DriverInfo] = {}
+    try:
+        results = session.results
+        if results is not None and not results.empty:
+            for row in results.itertuples():
+                code = getattr(row, "Abbreviation", None)
+                if not isinstance(code, str) or not code:
+                    continue
+                full_name = getattr(row, "FullName", None)
+                team_name = getattr(row, "TeamName", None)
+                info_by_code[code] = DriverInfo(
+                    code=code,
+                    full_name=full_name if isinstance(full_name, str) and full_name else None,
+                    number=_to_int(getattr(row, "DriverNumber", None)),
+                    team_name=team_name if isinstance(team_name, str) and team_name else None,
+                )
+    except Exception:
+        logger.warning("Could not read session.results for driver info", exc_info=True)
+
+    return [info_by_code.get(code, DriverInfo(code=code)) for code in driver_codes]

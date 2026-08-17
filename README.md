@@ -17,10 +17,10 @@ arquitetura, escolha de fontes de dados e roadmap.
 🚧 V1 em desenvolvimento incremental, por fases pequenas. Ver o roadmap em
 [docs/architecture.md](docs/architecture.md#roadmap-fases-pequenas-uma-de-cada-vez).
 
-Fase 1 (ingestão via FastF1) e Fase 2 (persistência em PostgreSQL) já estão
-implementadas: `GET /api/v1/races/{year}/{round}` lê primeiro da base de
-dados e só recorre ao FastF1 (gravando o resultado) se a corrida ainda não
-tiver sido ingerida.
+Fases 1-4 (ingestão via FastF1, persistência em PostgreSQL, motor de
+simulação, comparação de estratégias) já estão implementadas no backend.
+Fase 5 (frontend) está a começar: o ecrã de seleção de corrida já liga ao
+backend real.
 
 ## Stack
 
@@ -31,7 +31,9 @@ tiver sido ingerida.
   [docs/architecture.md](docs/architecture.md#fontes-de-dados--análise)
 - **Persistência:** PostgreSQL, via SQLAlchemy 2.x assíncrono (`asyncpg`) +
   Alembic para migrations
-- **Frontend:** React + TypeScript (a partir da Fase 5)
+- **Frontend:** React + TypeScript + Vite, Tailwind v4 (tema escuro "pit
+  wall" com tokens de cor de composto/acento — ver
+  [frontend/README.md](frontend/README.md))
 
 ## Desenvolvimento local
 
@@ -86,11 +88,24 @@ ruff check .
 mypy app
 ```
 
+## Frontend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env    # aponta para http://localhost:8000 por omissão
+npm run dev
+```
+
+Fica disponível em `http://localhost:5173`. Precisa do backend (e da base
+de dados) a correr — ver acima. Detalhes de stack, tokens de tema e
+estrutura em [frontend/README.md](frontend/README.md).
+
 ## Estrutura do repositório
 
 ```
 backend/    API + simulação (FastAPI, Python)
-frontend/   UI (React/TS) — adicionado na Fase 5
+frontend/   UI (React/TS/Vite) — em desenvolvimento desde a Fase 5
 infra/      Docker, CI/CD, Kubernetes — adicionado na Fase 6
 docs/       Arquitetura e decisões técnicas
 ```

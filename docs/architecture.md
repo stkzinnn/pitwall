@@ -119,11 +119,16 @@ serviço de observabilidade (logging estruturado + métricas).
    stint da estratégia alternativa (`simulation/engine.py`), e endpoint
    `POST /api/v1/simulate` a comparar com o tempo real do piloto. Sem dados
    suficientes para um composto → excluído da estimativa, nunca inventado.
-5. **Fase 4 — Comparação:** endpoint que compara a estratégia real extraída
-   dos dados vs. uma ou mais estratégias simuladas, incluindo o impacto de
-   safety cars / clima já observados na corrida.
-6. **Fase 5 — Frontend:** seleção de corrida, visualização da estratégia real
-   vs. simulada (gráfico de posição/tempo, tabela de stints).
+5. ✅ **Fase 4 — Comparação:** endpoint `POST /api/v1/compare` que corre
+   `simulate_strategy` para várias estratégias nomeadas de uma vez, ordena
+   por tempo estimado e devolve os deltas face à melhor — reaproveitando o
+   motor da Fase 3 sem reimplementar nada.
+6. 🚧 **Fase 5 — Frontend (React + TypeScript + Vite, Tailwind v4):**
+   estrutura inicial em `frontend/`, tema escuro "pit wall" com tokens
+   centrais (cores de composto, acento, tipografia mono), camada de API
+   tipada, routing preparado. Primeiro ecrã — seleção de corrida (ano/ronda,
+   estados de loading/erro/sucesso, lista de pilotos) — está feito. Por
+   fazer: construtor de estratégias e visualização da comparação.
 7. **Fase 6 — Produção:** Docker, docker-compose (backend + db), CI (lint +
    testes), e só depois Kubernetes/cloud/monitoring.
 

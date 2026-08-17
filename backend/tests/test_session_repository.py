@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.session import RaceSession
 from app.repositories import session_repository
-from app.schemas.session import Lap, PitStop, SessionData, Stint
+from app.schemas.session import DriverInfo, Lap, PitStop, SessionData, Stint
 
 
 def _make_session_data(*, session_type: str = "R", data_complete: bool = True) -> SessionData:
@@ -13,6 +13,8 @@ def _make_session_data(*, session_type: str = "R", data_complete: bool = True) -
         round=1,
         session_type=session_type,
         event_name="Bahrain Grand Prix",
+        country="Bahrain",
+        total_laps=57,
         data_complete=data_complete,
         laps=[
             Lap(
@@ -34,6 +36,11 @@ def _make_session_data(*, session_type: str = "R", data_complete: bool = True) -
         ],
         pit_stops=[PitStop(driver="VER", lap_number=1, duration_seconds=23.5)],
         stints=[Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=2)],
+        drivers=[
+            DriverInfo(
+                code="VER", full_name="Max Verstappen", number=1, team_name="Red Bull Racing"
+            )
+        ],
     )
 
 
@@ -53,7 +60,15 @@ async def test_save_then_get_session_round_trips(db_session: AsyncSession) -> No
     assert result.round == 1
     assert result.session_type == "R"
     assert result.event_name == "Bahrain Grand Prix"
+    assert result.country == "Bahrain"
+    assert result.total_laps == 57
     assert result.data_complete is True
+
+    assert len(result.drivers) == 1
+    assert result.drivers[0].code == "VER"
+    assert result.drivers[0].full_name == "Max Verstappen"
+    assert result.drivers[0].number == 1
+    assert result.drivers[0].team_name == "Red Bull Racing"
 
     assert len(result.laps) == 2
     assert result.laps[0].driver == "VER"
@@ -76,12 +91,14 @@ async def test_save_session_is_idempotent_and_replaces_children(db_session: Asyn
 
     updated = _make_session_data(data_complete=False)
     updated.laps = updated.laps[:1]
+    updated.drivers = []
     await session_repository.save_session(db_session, updated)
 
     result = await session_repository.get_session(db_session, year=2023, round=1, session_type="R")
     assert result is not None
     assert result.data_complete is False
     assert len(result.laps) == 1
+    assert result.drivers == []
 
     session_count = await db_session.scalar(select(func.count()).select_from(RaceSession))
     assert session_count == 1

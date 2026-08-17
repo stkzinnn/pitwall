@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — PitWall "pit wall" dark theme.
+ *
+ * Tailwind v4 turns every `--color-*` / `--font-*` custom property below
+ * into utility classes automatically (e.g. --color-surface -> bg-surface,
+ * text-surface, border-surface; --font-mono -> font-mono). Every future
+ * screen should reach for these tokens instead of hardcoding hex values,
+ * so the theme stays coherent and only needs updating in one place.
+ */
+@theme {
+  /* Base surfaces — dark, slightly blue-tinted, like a strategy monitor. */
+  --color-bg: #0a0d12;
+  --color-surface: #12161d;
+  --color-surface-raised: #1a1f28;
+  --color-border: #262c37;
+  --color-border-strong: #384152;
+
+  /* Text */
+  --color-text: #e6e9ef;
+  --color-text-muted: #8b93a3;
+  --color-text-dim: #5b6472;
+
+  /* Accent — for interactive elements and highlights only, used sparingly. */
+  --color-accent: #22d3ee;
+  --color-accent-strong: #0891b2;
+
+  /* Semantic status (distinct from tyre colors below, even where similar
+     hues overlap — status describes app state, tyres describe compound). */
+  --color-success: #34d399;
+  --color-danger: #f75466;
+  --color-warning: #f5c518;
+
+  /* Tyre compounds — the visual language for strategy screens. Every
+     screen that shows a compound must use these tokens, never a raw hex,
+     so a compound always reads the same color everywhere. */
+  --color-tyre-soft: #e8253b;
+  --color-tyre-medium: #f5c518;
+  --color-tyre-hard: #eef0f2;
+  --color-tyre-intermediate: #3aa655;
+  --color-tyre-wet: #2f7de1;
+
+  /* Typography: monospace for anything numeric/telemetry (lap times,
+     deltas, lap counts) to read like a timing screen; sans for prose/UI
+     labels. */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  min-height: 100vh;
+}

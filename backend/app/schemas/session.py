@@ -33,12 +33,27 @@ class Stint(BaseModel):
     end_lap: int
 
 
+class DriverInfo(BaseModel):
+    """Static info about a driver for this session (from FastF1's
+    session.results, not per-lap data). Fields beyond `code` degrade to
+    None rather than failing when a session's results are incomplete —
+    see fastf1_client._build_drivers."""
+
+    code: str
+    full_name: str | None = None
+    number: int | None = None
+    team_name: str | None = None
+
+
 class SessionData(BaseModel):
     year: int
     round: int
     session_type: str
     event_name: str | None = None
+    country: str | None = None
+    total_laps: int | None = None
     laps: list[Lap] = []
     pit_stops: list[PitStop] = []
     stints: list[Stint] = []
+    drivers: list[DriverInfo] = []
     data_complete: bool = True

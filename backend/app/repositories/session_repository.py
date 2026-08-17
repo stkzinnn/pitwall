@@ -2,16 +2,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.session import Driver as DriverModel
 from app.models.session import Lap as LapModel
 from app.models.session import PitStop as PitStopModel
 from app.models.session import RaceSession
 from app.models.session import Stint as StintModel
-from app.schemas.session import Lap, PitStop, SessionData, Stint
+from app.schemas.session import DriverInfo, Lap, PitStop, SessionData, Stint
 
 _EAGER_LOAD_CHILDREN = (
     selectinload(RaceSession.laps),
     selectinload(RaceSession.pit_stops),
     selectinload(RaceSession.stints),
+    selectinload(RaceSession.drivers),
 )
 
 
@@ -19,9 +21,9 @@ async def save_session(db: AsyncSession, session_data: SessionData) -> None:
     """Persist a SessionData, keyed by (year, round, session_type).
 
     Idempotent: if a matching session already exists, its fields and all of
-    its laps/pit_stops/stints are replaced with the incoming data rather
-    than duplicated. Children are replaced wholesale (not diffed row by
-    row) since FastF1 always hands back the full session, not a delta.
+    its laps/pit_stops/stints/drivers are replaced with the incoming data
+    rather than duplicated. Children are replaced wholesale (not diffed row
+    by row) since FastF1 always hands back the full session, not a delta.
     """
     race_session = await _get_race_session(
         db, session_data.year, session_data.round, session_data.session_type
@@ -36,6 +38,8 @@ async def save_session(db: AsyncSession, session_data: SessionData) -> None:
         db.add(race_session)
 
     race_session.event_name = session_data.event_name
+    race_session.country = session_data.country
+    race_session.total_laps = session_data.total_laps
     race_session.data_complete = session_data.data_complete
 
     race_session.laps = [
@@ -69,6 +73,15 @@ async def save_session(db: AsyncSession, session_data: SessionData) -> None:
         )
         for stint in session_data.stints
     ]
+    race_session.drivers = [
+        DriverModel(
+            code=driver.code,
+            full_name=driver.full_name,
+            number=driver.number,
+            team_name=driver.team_name,
+        )
+        for driver in session_data.drivers
+    ]
 
     await db.commit()
 
@@ -88,6 +101,8 @@ async def get_session(
         round=race_session.round,
         session_type=race_session.session_type,
         event_name=race_session.event_name,
+        country=race_session.country,
+        total_laps=race_session.total_laps,
         data_complete=race_session.data_complete,
         laps=[
             Lap(
@@ -121,6 +136,15 @@ async def get_session(
                 end_lap=stint.end_lap,
             )
             for stint in race_session.stints
+        ],
+        drivers=[
+            DriverInfo(
+                code=driver.code,
+                full_name=driver.full_name,
+                number=driver.number,
+                team_name=driver.team_name,
+            )
+            for driver in race_session.drivers
         ],
     )
 

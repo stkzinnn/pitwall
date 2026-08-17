@@ -8,7 +8,15 @@ def test_load_session_data_returns_normalized_race_data() -> None:
     session_data = load_session_data(year=2023, round=1, session_type="R")
 
     assert session_data.event_name == "Bahrain Grand Prix"
+    assert session_data.country == "Bahrain"
+    assert session_data.total_laps == 57
     assert session_data.data_complete is True
+
+    assert len(session_data.drivers) > 0
+    driver = next(d for d in session_data.drivers if d.code == "VER")
+    assert driver.full_name == "Max Verstappen"
+    assert driver.number == 1
+    assert driver.team_name == "Red Bull Racing"
 
     assert len(session_data.laps) > 0
     lap = session_data.laps[0]

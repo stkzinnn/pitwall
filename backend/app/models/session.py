@@ -24,6 +24,8 @@ class RaceSession(Base):
     round: Mapped[int] = mapped_column(Integer, nullable=False)
     session_type: Mapped[str] = mapped_column(String(16), nullable=False)
     event_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    total_laps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     data_complete: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     laps: Mapped[list["Lap"]] = relationship(
@@ -34,6 +36,9 @@ class RaceSession(Base):
     )
     stints: Mapped[list["Stint"]] = relationship(
         back_populates="session", cascade="all, delete-orphan", order_by="Stint.stint_number"
+    )
+    drivers: Mapped[list["Driver"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="Driver.id"
     )
 
 
@@ -83,3 +88,21 @@ class Stint(Base):
     end_lap: Mapped[int] = mapped_column(Integer, nullable=False)
 
     session: Mapped[RaceSession] = relationship(back_populates="stints")
+
+
+class Driver(Base):
+    """Static per-driver info for a session (name/number/team), separate
+    from Lap since it doesn't vary lap to lap — see
+    fastf1_client._build_drivers."""
+
+    __tablename__ = "drivers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("race_sessions.id", ondelete="CASCADE"))
+
+    code: Mapped[str] = mapped_column(String(8), nullable=False)
+    full_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    team_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    session: Mapped[RaceSession] = relationship(back_populates="drivers")

@@ -33,11 +33,15 @@ def _lap(
 
 
 def test_simulate_strategy_single_stint_with_zero_degradation() -> None:
-    # 1 out lap (100.0, excluded) + 3 flat laps at 90.0 -> base_pace=90.0,
-    # degradation=0.0. A single-stint strategy has zero pit stops.
+    # 1 out lap (100.0, excluded from the pace fit) + 3 flat laps at 90.0 ->
+    # base_pace=90.0, degradation=0.0. number_of_laps=4 matches the real
+    # stint's full physical length (end_lap - start_lap + 1 = 4), the same
+    # convention the frontend and the /compare-style callers use — so this
+    # strategy covers exactly the 4-lap "race" and triggers no lap-count
+    # warning. A single-stint strategy has zero pit stops.
     driver_laps = [_lap(1, 100.0), _lap(2, 90.0), _lap(3, 90.0), _lap(4, 90.0)]
     real_stints = [Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4)]
-    strategy = [StintPlan(compound="SOFT", number_of_laps=3)]
+    strategy = [StintPlan(compound="SOFT", number_of_laps=4)]
 
     result = simulate_strategy(
         driver="VER",
@@ -47,11 +51,11 @@ def test_simulate_strategy_single_stint_with_zero_degradation() -> None:
         pit_stop_cost=20.0,
     )
 
-    # estimated = 3 laps * 90.0 + 0 degradation + 0 pit stops (1 stint) = 270.0
-    assert result.estimated_total_time_seconds == pytest.approx(270.0)
+    # estimated = 4 laps * 90.0 + 0 degradation + 0 pit stops (1 stint) = 360.0
+    assert result.estimated_total_time_seconds == pytest.approx(360.0)
     # real = 100.0 + 90.0 + 90.0 + 90.0 = 370.0
     assert result.real_total_time_seconds == pytest.approx(370.0)
-    assert result.difference_seconds == pytest.approx(270.0 - 370.0)
+    assert result.difference_seconds == pytest.approx(360.0 - 370.0)
     assert result.warnings == []
     # No safety car laps in this fixture -> no compensation, no warning.
     assert result.safety_car_time_added_seconds == 0.0
@@ -73,9 +77,12 @@ def test_simulate_strategy_two_stints_adds_one_pit_stop_cost() -> None:
         Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4),
         Stint(driver="VER", stint_number=2, compound="HARD", start_lap=5, end_lap=8),
     ]
+    # 4 + 4 = 8, matching the fixture's real total_laps (8) exactly (see
+    # note in the single-stint test above about the number_of_laps
+    # convention) -> no lap-count warning here either.
     strategy = [
-        StintPlan(compound="SOFT", number_of_laps=2),
-        StintPlan(compound="HARD", number_of_laps=2),
+        StintPlan(compound="SOFT", number_of_laps=4),
+        StintPlan(compound="HARD", number_of_laps=4),
     ]
 
     result = simulate_strategy(
@@ -86,9 +93,9 @@ def test_simulate_strategy_two_stints_adds_one_pit_stop_cost() -> None:
         pit_stop_cost=25.0,
     )
 
-    # estimated = (2 * 90.0) + (2 * 92.0) + 1 pit stop * 25.0
-    #           = 180.0 + 184.0 + 25.0 = 389.0
-    assert result.estimated_total_time_seconds == pytest.approx(389.0)
+    # estimated = (4 * 90.0) + (4 * 92.0) + 1 pit stop * 25.0
+    #           = 360.0 + 368.0 + 25.0 = 753.0
+    assert result.estimated_total_time_seconds == pytest.approx(753.0)
     assert result.warnings == []
 
 
@@ -255,3 +262,55 @@ def test_simulate_strategy_replay_is_consistent_with_real_fuel_effect_enabled() 
     original_clean_laps_sum = sum(lap.lap_time_seconds for lap in driver_laps[1:])
     assert result.estimated_total_time_seconds is not None
     assert result.estimated_total_time_seconds == pytest.approx(original_clean_laps_sum, abs=1e-6)
+
+
+def test_simulate_strategy_warns_when_lap_count_exceeds_the_race_distance() -> None:
+    driver_laps = [_lap(1, 100.0), _lap(2, 90.0), _lap(3, 90.0), _lap(4, 90.0)]
+    real_stints = [Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4)]
+    # The race only ran 4 laps; this strategy plans 6 -> 2 laps too many.
+    strategy = [StintPlan(compound="SOFT", number_of_laps=6)]
+
+    result = simulate_strategy(
+        driver="VER",
+        driver_laps=driver_laps,
+        real_stints=real_stints,
+        strategy=strategy,
+        pit_stop_cost=20.0,
+    )
+
+    assert any("6" in warning and "4" in warning for warning in result.warnings)
+    assert any("+2" in warning for warning in result.warnings)
+
+
+def test_simulate_strategy_warns_when_lap_count_falls_short_of_the_race_distance() -> None:
+    driver_laps = [_lap(1, 100.0), _lap(2, 90.0), _lap(3, 90.0), _lap(4, 90.0)]
+    real_stints = [Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4)]
+    # The race ran 4 laps; this strategy only plans 2 -> 2 laps short.
+    strategy = [StintPlan(compound="SOFT", number_of_laps=2)]
+
+    result = simulate_strategy(
+        driver="VER",
+        driver_laps=driver_laps,
+        real_stints=real_stints,
+        strategy=strategy,
+        pit_stop_cost=20.0,
+    )
+
+    assert any("2" in warning and "4" in warning for warning in result.warnings)
+    assert any("-2" in warning for warning in result.warnings)
+
+
+def test_simulate_strategy_no_lap_count_warning_when_strategy_matches_race_distance() -> None:
+    driver_laps = [_lap(1, 100.0), _lap(2, 90.0), _lap(3, 90.0), _lap(4, 90.0)]
+    real_stints = [Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4)]
+    strategy = [StintPlan(compound="SOFT", number_of_laps=4)]
+
+    result = simulate_strategy(
+        driver="VER",
+        driver_laps=driver_laps,
+        real_stints=real_stints,
+        strategy=strategy,
+        pit_stop_cost=20.0,
+    )
+
+    assert result.warnings == []

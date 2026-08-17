@@ -40,6 +40,9 @@ class RaceSession(Base):
     drivers: Mapped[list["Driver"]] = relationship(
         back_populates="session", cascade="all, delete-orphan", order_by="Driver.id"
     )
+    results: Mapped[list["DriverResult"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="DriverResult.id"
+    )
 
 
 class Lap(Base):
@@ -106,3 +109,24 @@ class Driver(Base):
     team_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     session: Mapped[RaceSession] = relationship(back_populates="drivers")
+
+
+class DriverResult(Base):
+    """Final classification for one driver in a session — see
+    fastf1_client._build_results. Separate from Driver (static
+    name/number/team info) since this is outcome data, not identity."""
+
+    __tablename__ = "driver_results"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("race_sessions.id", ondelete="CASCADE"))
+
+    code: Mapped[str] = mapped_column(String(8), nullable=False)
+    position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    classified_position: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    total_time_seconds: Mapped[float | None] = mapped_column(_SECONDS, nullable=True)
+    gap_to_leader_seconds: Mapped[float | None] = mapped_column(_SECONDS, nullable=True)
+    points: Mapped[float | None] = mapped_column(Numeric(6, 2, asdecimal=False), nullable=True)
+
+    session: Mapped[RaceSession] = relationship(back_populates="results")

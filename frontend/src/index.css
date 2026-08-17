@@ -69,3 +69,28 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* Simulation results: a soft fade + rise as each strategy card appears,
+   so "Simular estratégias" reads as a calculation completing rather than
+   the layout just snapping into place. Staggered per-card via an inline
+   animation-delay (see StrategyResultCard). */
+@keyframes result-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-result-in {
+  animation: result-card-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-result-in {
+    animation: none;
+  }
+}

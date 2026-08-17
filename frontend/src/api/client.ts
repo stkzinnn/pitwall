@@ -29,10 +29,10 @@ interface FastApiErrorBody {
   detail?: string
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+async function handleResponse<T>(responsePromise: Promise<Response>): Promise<T> {
   let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`)
+    response = await responsePromise
   } catch {
     throw new ApiError(0, 'Não foi possível ligar ao servidor.')
   }
@@ -50,4 +50,18 @@ export async function apiGet<T>(path: string): Promise<T> {
   }
 
   return (await response.json()) as T
+}
+
+export function apiGet<T>(path: string): Promise<T> {
+  return handleResponse<T>(fetch(`${API_BASE_URL}${path}`))
+}
+
+export function apiPost<T>(path: string, body: unknown): Promise<T> {
+  return handleResponse<T>(
+    fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  )
 }

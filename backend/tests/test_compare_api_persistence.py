@@ -8,6 +8,7 @@ case, neither of which the integration test can assert deterministically.
 
 from unittest.mock import patch
 
+import pytest
 from httpx import AsyncClient
 
 from app.schemas.session import Lap, PitStop, SessionData, Stint
@@ -88,7 +89,10 @@ async def test_compare_includes_both_valid_and_unreliable_strategies(
 ) -> None:
     payload = _payload(
         [
-            {"label": "valid", "strategy": [{"compound": "SOFT", "number_of_laps": 3}]},
+            # 8 laps matches the fake session's real total_laps (8) exactly
+            # (see engine._warn_if_strategy_lap_count_differs_from_race) —
+            # picked deliberately so this strategy stays warning-free.
+            {"label": "valid", "strategy": [{"compound": "SOFT", "number_of_laps": 8}]},
             {
                 "label": "no-data-for-compound",
                 "strategy": [{"compound": "INTERMEDIATE", "number_of_laps": 10}],
@@ -133,3 +137,57 @@ async def test_compare_returns_404_for_unknown_driver(client: AsyncClient) -> No
         response = await client.post("/api/v1/compare", json=payload)
 
     assert response.status_code == 404
+
+
+async def test_compare_uses_the_drivers_own_pit_stop_cost_not_the_session_wide_one(
+    client: AsyncClient,
+) -> None:
+    """/compare must use the SAME pit-stop-cost basis as
+    test_engine_regression.py (pitstop_model.calculate_driver_pit_stop_cost)
+    — VER's own average when he has enough real stops, ignoring the very
+    different session-wide average from other drivers' (much slower) stops.
+    """
+    session_data = _fake_session_data()
+    session_data.pit_stops = [
+        PitStop(driver="VER", lap_number=4, duration_seconds=20.0),
+        PitStop(driver="VER", lap_number=30, duration_seconds=22.0),
+        # Other drivers' stops are much slower — if /compare mistakenly used
+        # the session-wide average, the 2-stint strategy below would come
+        # out with a visibly higher pit-stop cost baked in.
+        PitStop(driver="HAM", lap_number=12, duration_seconds=60.0),
+        PitStop(driver="PER", lap_number=14, duration_seconds=65.0),
+    ]
+
+    payload = _payload(
+        [
+            {
+                "label": "two-stint",
+                # 4 + 4 = 8, matching the fixture's real total_laps (8) —
+                # no lap-count-mismatch warning muddying the comparison.
+                "strategy": [
+                    {"compound": "SOFT", "number_of_laps": 4},
+                    {"compound": "HARD", "number_of_laps": 4},
+                ],
+            }
+        ]
+    )
+
+    with patch("app.api.v1.compare.load_session_data", return_value=session_data):
+        response = await client.post("/api/v1/compare", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    entry = body["strategies"][0]
+
+    # SOFT stint fit: base=90.0, degradation=0.1/lap (laps 90.0/90.1/90.2 in
+    # _fake_session_data) -> 4 laps ~ 90.0+90.1+90.2+90.3 = 360.6. HARD
+    # stint fit: base=92.0, degradation=0.1/lap -> 4 laps ~ 368.6 (both
+    # within a few hundredths of a second of that, from the default fuel
+    # correction /compare applies). Plus VER's own average pit stop cost
+    # (21.0), NOT the session-wide one (~41.75) — the ~0.5s gap between the
+    # two is much bigger than the fuel-correction noise, so this asserts
+    # tight enough to catch the endpoint silently reverting to the
+    # session-wide average while tolerating that noise.
+    assert entry["result"]["estimated_total_time_seconds"] == pytest.approx(
+        360.6 + 368.6 + 21.0, abs=0.2
+    )

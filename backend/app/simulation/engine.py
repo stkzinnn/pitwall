@@ -64,6 +64,9 @@ def simulate_strategy(
 
     total_laps = max((lap.lap_number for lap in driver_laps), default=0)
 
+    if total_laps > 0:
+        _warn_if_strategy_lap_count_differs_from_race(strategy, total_laps, warnings)
+
     real_total_time_seconds = _sum_real_lap_times(driver_laps, warnings)
     real_stint_models = build_driver_stint_pace_models(
         driver_laps, real_stints, total_laps, fuel_config
@@ -173,6 +176,34 @@ def _select_pace_model(
         model.pace for model in real_stint_models if model.compound == stint_plan.compound
     ]
     return average_pace_model(same_compound_models)
+
+
+def _warn_if_strategy_lap_count_differs_from_race(
+    strategy: list[StintPlan], total_laps: int, warnings: list[str]
+) -> None:
+    """Se o total de voltas planeado na estratégia não bater certo com o
+    número real de voltas da corrida, avisa explicitamente: mais (ou menos)
+    voltas do que a corrida real significa mais (ou menos) tempo de pista
+    total só por causa disso — uma diferença que não tem nada a ver com a
+    qualidade da estratégia de pneus escolhida, e por isso não deve ser
+    lida como tal ao comparar com o tempo real.
+
+    `strategy_total_laps` é a soma direta de StintPlan.number_of_laps —
+    a mesma contagem que o frontend já mostra ao utilizador (ver
+    StrategyEditor.tsx), para o aviso do backend e o do frontend
+    concordarem sempre no mesmo número.
+    """
+    strategy_total_laps = sum(stint_plan.number_of_laps for stint_plan in strategy)
+    lap_delta = strategy_total_laps - total_laps
+
+    if lap_delta == 0:
+        return
+
+    warnings.append(
+        f"Estratégia planeada tem {strategy_total_laps} volta(s); a corrida teve {total_laps} "
+        f"({lap_delta:+d} volta(s)) — essa diferença afeta o tempo estimado só por si, "
+        "independentemente da escolha de pneus."
+    )
 
 
 def _sum_real_lap_times(driver_laps: list[Lap], warnings: list[str]) -> float | None:

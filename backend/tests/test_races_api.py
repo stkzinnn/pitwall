@@ -39,6 +39,11 @@ async def test_get_race_session_returns_normalized_data() -> None:
     assert ver["full_name"] == "Max Verstappen"
     assert ver["team_name"] == "Red Bull Racing"
 
+    assert len(body["results"]) > 0
+    ver_result = next(r for r in body["results"] if r["code"] == "VER")
+    assert ver_result["position"] == 1
+    assert ver_result["total_time_seconds"] == pytest.approx(5636.736)
+
 
 @pytest.mark.integration
 async def test_get_race_session_returns_404_for_invalid_round() -> None:

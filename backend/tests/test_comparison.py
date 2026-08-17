@@ -30,9 +30,13 @@ def test_compare_strategies_orders_by_estimated_time_ascending() -> None:
         Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4),
         Stint(driver="VER", stint_number=2, compound="HARD", start_lap=5, end_lap=8),
     ]
+    # number_of_laps=8 for both (single stint) matches the fixture's real
+    # total_laps (8) exactly, so neither strategy trips the lap-count
+    # mismatch warning this test isn't about — see
+    # engine._warn_if_strategy_lap_count_differs_from_race.
     named_strategies = [
-        NamedStrategy(label="all-soft", strategy=[StintPlan(compound="SOFT", number_of_laps=3)]),
-        NamedStrategy(label="all-hard", strategy=[StintPlan(compound="HARD", number_of_laps=3)]),
+        NamedStrategy(label="all-soft", strategy=[StintPlan(compound="SOFT", number_of_laps=8)]),
+        NamedStrategy(label="all-hard", strategy=[StintPlan(compound="HARD", number_of_laps=8)]),
     ]
 
     result = compare_strategies(
@@ -47,12 +51,12 @@ def test_compare_strategies_orders_by_estimated_time_ascending() -> None:
         fuel_config=ZERO_FUEL_EFFECT_CONFIG,
     )
 
-    # all-hard: 3 * 80.0 = 240.0 ; all-soft: 3 * 90.0 = 270.0
+    # all-hard: 8 * 80.0 = 640.0 ; all-soft: 8 * 90.0 = 720.0
     assert [entry.label for entry in result.strategies] == ["all-hard", "all-soft"]
     assert result.best_label == "all-hard"
-    assert result.best_estimated_total_time_seconds == pytest.approx(240.0)
+    assert result.best_estimated_total_time_seconds == pytest.approx(640.0)
     assert result.strategies[0].delta_to_best_seconds == pytest.approx(0.0)
-    assert result.strategies[1].delta_to_best_seconds == pytest.approx(30.0)
+    assert result.strategies[1].delta_to_best_seconds == pytest.approx(80.0)
     assert result.strategies[0].has_warnings is False
     assert result.strategies[1].has_warnings is False
 
@@ -144,13 +148,17 @@ def test_compare_strategies_appends_missing_pit_stop_warning_per_multi_stint_str
         Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4),
         Stint(driver="VER", stint_number=2, compound="HARD", start_lap=5, end_lap=8),
     ]
+    # number_of_laps sums to 8 for both strategies (matching the fixture's
+    # real total_laps) so this test stays focused on the missing-pit-stop
+    # warning, without incidentally also tripping the lap-count mismatch
+    # warning — see engine._warn_if_strategy_lap_count_differs_from_race.
     named_strategies = [
-        NamedStrategy(label="one-stint", strategy=[StintPlan(compound="SOFT", number_of_laps=3)]),
+        NamedStrategy(label="one-stint", strategy=[StintPlan(compound="SOFT", number_of_laps=8)]),
         NamedStrategy(
             label="two-stint",
             strategy=[
-                StintPlan(compound="SOFT", number_of_laps=2),
-                StintPlan(compound="HARD", number_of_laps=2),
+                StintPlan(compound="SOFT", number_of_laps=4),
+                StintPlan(compound="HARD", number_of_laps=4),
             ],
         ),
     ]

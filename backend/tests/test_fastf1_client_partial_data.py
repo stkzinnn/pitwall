@@ -14,6 +14,7 @@ import pytest
 
 from app.data_sources import fastf1_client
 from app.data_sources.fastf1_client import load_session_data
+from app.schemas.session import DriverResult
 
 
 class FakeSession:
@@ -324,3 +325,86 @@ def test_driver_info_degrades_gracefully_for_driver_missing_from_results(
     assert by_code["VER"].full_name == "Max Verstappen"
     assert by_code["HAM"].full_name is None
     assert by_code["HAM"].code == "HAM"
+
+
+def test_results_are_extracted_with_winner_time_and_gap_split(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    laps = _laps_df(
+        [
+            _row("VER", lap_number=1, stint=1.0),
+            _row("HAM", lap_number=1, stint=1.0),
+        ]
+    )
+    results = pd.DataFrame(
+        [
+            {
+                "Abbreviation": "VER",
+                "Position": 1.0,
+                "ClassifiedPosition": "1",
+                "Status": "Finished",
+                "Time": pd.Timedelta(hours=1, minutes=33, seconds=56.736),
+                "Points": 25.0,
+            },
+            {
+                "Abbreviation": "HAM",
+                "Position": 2.0,
+                "ClassifiedPosition": "2",
+                "Status": "Finished",
+                "Time": pd.Timedelta(seconds=11.987),
+                "Points": 18.0,
+            },
+        ]
+    )
+    _patch_get_session(monkeypatch, FakeSession(laps, results_df=results))
+
+    result = load_session_data(year=2099, round=1, session_type="R")
+
+    by_code = {r.code: r for r in result.results}
+    winner = by_code["VER"]
+    assert winner.position == 1
+    assert winner.classified_position == "1"
+    assert winner.status == "Finished"
+    assert winner.total_time_seconds == pytest.approx(5636.736)
+    assert winner.gap_to_leader_seconds is None
+    assert winner.points == pytest.approx(25.0)
+
+    runner_up = by_code["HAM"]
+    assert runner_up.position == 2
+    assert runner_up.total_time_seconds is None
+    assert runner_up.gap_to_leader_seconds == pytest.approx(11.987)
+
+
+def test_results_handle_a_retired_driver(monkeypatch: pytest.MonkeyPatch) -> None:
+    laps = _laps_df([_row("OCO", lap_number=1, stint=1.0)])
+    results = pd.DataFrame(
+        [
+            {
+                "Abbreviation": "OCO",
+                "Position": 18.0,
+                "ClassifiedPosition": "R",
+                "Status": "Retired",
+                "Time": pd.NaT,
+                "Points": 0.0,
+            }
+        ]
+    )
+    _patch_get_session(monkeypatch, FakeSession(laps, results_df=results))
+
+    result = load_session_data(year=2099, round=1, session_type="R")
+
+    oco = result.results[0]
+    assert oco.classified_position == "R"
+    assert oco.status == "Retired"
+    assert oco.total_time_seconds is None
+    assert oco.gap_to_leader_seconds is None
+
+
+def test_results_degrade_gracefully_when_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    laps = _laps_df([_row("VER", lap_number=1, stint=1.0)])
+    _patch_get_session(monkeypatch, FakeSession(laps))
+
+    result = load_session_data(year=2099, round=1, session_type="R")
+
+    assert len(result.results) == 1
+    assert result.results[0] == DriverResult(code="VER")

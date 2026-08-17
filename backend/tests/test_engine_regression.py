@@ -34,6 +34,17 @@ HISTORY:
   pace_model.compute_stint_pace() corrects for fuel load before fitting,
   and engine.py adds the fuel effect back per simulated lap (see
   fuel_model.py), the replay closes further to ~+4.3s.
+- This test used to compute pit_stop_cost from VER's OWN pit stops
+  (calculate_average_pit_stop_cost(driver_pit_stops)), while the
+  /simulate and /compare endpoints computed it from EVERY driver's pit
+  stops in the session — the test validated a different number than what
+  the API actually returned. Both now go through
+  pitstop_model.calculate_driver_pit_stop_cost (own average, with a
+  session-wide fallback for a small sample — see that function's
+  docstring), so this test's tolerance reflects what users actually see.
+  For VER here (2 real pit stops, above the fallback threshold), this is
+  numerically identical to the old driver-only average, so the ~+4.3s
+  figure above is unchanged.
 """
 
 import pytest
@@ -41,7 +52,7 @@ import pytest
 from app.data_sources.fastf1_client import load_session_data
 from app.schemas.simulation import StintPlan
 from app.simulation.engine import simulate_strategy
-from app.simulation.pitstop_model import calculate_average_pit_stop_cost
+from app.simulation.pitstop_model import calculate_driver_pit_stop_cost
 
 # Confirmed empirically at ~+4.3s (see HISTORY above) after the fuel
 # correction was added, down from ~+7.4s. 8s leaves a small margin while
@@ -67,7 +78,7 @@ def test_replaying_drivers_real_strategy_is_close_to_their_real_time() -> None:
         StintPlan(compound=stint.compound, number_of_laps=stint.end_lap - stint.start_lap + 1)
         for stint in driver_stints
     ]
-    pit_stop_cost = calculate_average_pit_stop_cost(driver_pit_stops)
+    pit_stop_cost = calculate_driver_pit_stop_cost(driver_pit_stops, session_data.pit_stops)
 
     result = simulate_strategy(
         driver="VER",

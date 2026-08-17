@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.session import RaceSession
 from app.repositories import session_repository
-from app.schemas.session import DriverInfo, Lap, PitStop, SessionData, Stint
+from app.schemas.session import DriverInfo, DriverResult, Lap, PitStop, SessionData, Stint
 
 
 def _make_session_data(*, session_type: str = "R", data_complete: bool = True) -> SessionData:
@@ -41,6 +41,16 @@ def _make_session_data(*, session_type: str = "R", data_complete: bool = True) -
                 code="VER", full_name="Max Verstappen", number=1, team_name="Red Bull Racing"
             )
         ],
+        results=[
+            DriverResult(
+                code="VER",
+                position=1,
+                classified_position="1",
+                status="Finished",
+                total_time_seconds=5636.736,
+                points=25.0,
+            )
+        ],
     )
 
 
@@ -70,6 +80,14 @@ async def test_save_then_get_session_round_trips(db_session: AsyncSession) -> No
     assert result.drivers[0].number == 1
     assert result.drivers[0].team_name == "Red Bull Racing"
 
+    assert len(result.results) == 1
+    assert result.results[0].code == "VER"
+    assert result.results[0].position == 1
+    assert result.results[0].classified_position == "1"
+    assert result.results[0].status == "Finished"
+    assert result.results[0].total_time_seconds == pytest.approx(5636.736)
+    assert result.results[0].points == pytest.approx(25.0)
+
     assert len(result.laps) == 2
     assert result.laps[0].driver == "VER"
     assert result.laps[0].lap_time_seconds == pytest.approx(99.019)
@@ -92,6 +110,7 @@ async def test_save_session_is_idempotent_and_replaces_children(db_session: Asyn
     updated = _make_session_data(data_complete=False)
     updated.laps = updated.laps[:1]
     updated.drivers = []
+    updated.results = []
     await session_repository.save_session(db_session, updated)
 
     result = await session_repository.get_session(db_session, year=2023, round=1, session_type="R")
@@ -99,6 +118,7 @@ async def test_save_session_is_idempotent_and_replaces_children(db_session: Asyn
     assert result.data_complete is False
     assert len(result.laps) == 1
     assert result.drivers == []
+    assert result.results == []
 
     session_count = await db_session.scalar(select(func.count()).select_from(RaceSession))
     assert session_count == 1

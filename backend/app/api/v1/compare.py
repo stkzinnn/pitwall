@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.repositories import session_repository
 from app.schemas.simulation import ComparisonRequest, ComparisonResult
 from app.simulation.comparison import compare_strategies
-from app.simulation.pitstop_model import calculate_average_pit_stop_cost
+from app.simulation.pitstop_model import calculate_driver_pit_stop_cost
 
 router = APIRouter(prefix="/compare", tags=["simulation"])
 
@@ -39,8 +39,9 @@ async def compare(
             detail=f"Sem dados de voltas para o piloto {request.driver!r} nesta sessão.",
         )
     driver_stints = [stint for stint in session_data.stints if stint.driver == request.driver]
+    driver_pit_stops = [stop for stop in session_data.pit_stops if stop.driver == request.driver]
 
-    pit_stop_cost = calculate_average_pit_stop_cost(session_data.pit_stops)
+    pit_stop_cost = calculate_driver_pit_stop_cost(driver_pit_stops, session_data.pit_stops)
 
     return compare_strategies(
         driver=request.driver,

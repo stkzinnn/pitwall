@@ -3,17 +3,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.session import Driver as DriverModel
+from app.models.session import DriverResult as DriverResultModel
 from app.models.session import Lap as LapModel
 from app.models.session import PitStop as PitStopModel
 from app.models.session import RaceSession
 from app.models.session import Stint as StintModel
-from app.schemas.session import DriverInfo, Lap, PitStop, SessionData, Stint
+from app.schemas.session import DriverInfo, DriverResult, Lap, PitStop, SessionData, Stint
 
 _EAGER_LOAD_CHILDREN = (
     selectinload(RaceSession.laps),
     selectinload(RaceSession.pit_stops),
     selectinload(RaceSession.stints),
     selectinload(RaceSession.drivers),
+    selectinload(RaceSession.results),
 )
 
 
@@ -82,6 +84,18 @@ async def save_session(db: AsyncSession, session_data: SessionData) -> None:
         )
         for driver in session_data.drivers
     ]
+    race_session.results = [
+        DriverResultModel(
+            code=result.code,
+            position=result.position,
+            classified_position=result.classified_position,
+            status=result.status,
+            total_time_seconds=result.total_time_seconds,
+            gap_to_leader_seconds=result.gap_to_leader_seconds,
+            points=result.points,
+        )
+        for result in session_data.results
+    ]
 
     await db.commit()
 
@@ -145,6 +159,18 @@ async def get_session(
                 team_name=driver.team_name,
             )
             for driver in race_session.drivers
+        ],
+        results=[
+            DriverResult(
+                code=result.code,
+                position=result.position,
+                classified_position=result.classified_position,
+                status=result.status,
+                total_time_seconds=result.total_time_seconds,
+                gap_to_leader_seconds=result.gap_to_leader_seconds,
+                points=result.points,
+            )
+            for result in race_session.results
         ],
     )
 

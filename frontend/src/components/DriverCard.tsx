@@ -1,24 +1,54 @@
+import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import type { DriverInfo } from '../api/types'
 import { getTeamColor } from '../theme/teamColors'
 import { DriverAvatar } from './DriverAvatar'
 
 interface DriverCardProps {
   driver: DriverInfo
+  /** When given, the card navigates there on click/Enter (e.g. the
+   * strategy builder for this driver) and is keyboard-focusable. Omit for
+   * a purely informational card (e.g. the driver highlight in the
+   * strategy screen's own header) — same visual language, no navigation. */
+  to?: string
 }
 
+const CARD_CLASSES =
+  'group flex items-center gap-3 rounded-lg border border-border bg-surface-raised p-3 transition-all duration-150'
+const INTERACTIVE_CLASSES =
+  'hover:-translate-y-0.5 hover:border-border-strong hover:shadow-[0_8px_20px_-8px_rgba(0,0,0,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+
 /** A driver's card: avatar, name, team, number — with a team-colored left
- * accent for instant visual identification. Styled to read as clickable
- * (hover lift, focus ring) ahead of the strategy screen it'll navigate to
- * in the next phase; no onClick yet, that's wired up when that screen
- * exists. */
-export function DriverCard({ driver }: DriverCardProps) {
+ * accent for instant visual identification. */
+export function DriverCard({ driver, to }: DriverCardProps) {
   const accentColor = getTeamColor(driver.team_name)
+  const style = { borderLeftColor: accentColor, borderLeftWidth: 3 }
+  const content = <DriverCardContent driver={driver} accentColor={accentColor} />
+
+  if (to) {
+    return (
+      <Link to={to} className={`${CARD_CLASSES} ${INTERACTIVE_CLASSES}`} style={style}>
+        {content}
+      </Link>
+    )
+  }
 
   return (
-    <div
-      className="group flex items-center gap-3 rounded-lg border border-border bg-surface-raised p-3 transition-all duration-150 hover:-translate-y-0.5 hover:border-border-strong hover:shadow-[0_8px_20px_-8px_rgba(0,0,0,0.6)]"
-      style={{ borderLeftColor: accentColor, borderLeftWidth: 3 }}
-    >
+    <div className={CARD_CLASSES} style={style}>
+      {content}
+    </div>
+  )
+}
+
+function DriverCardContent({
+  driver,
+  accentColor,
+}: {
+  driver: DriverInfo
+  accentColor: string
+}): ReactNode {
+  return (
+    <>
       <DriverAvatar driver={driver} />
 
       <div className="min-w-0 flex-1">
@@ -36,6 +66,6 @@ export function DriverCard({ driver }: DriverCardProps) {
           </span>
         )}
       </div>
-    </div>
+    </>
   )
 }

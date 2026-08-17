@@ -18,6 +18,17 @@ def test_load_session_data_returns_normalized_race_data() -> None:
     assert driver.number == 1
     assert driver.team_name == "Red Bull Racing"
 
+    assert len(session_data.results) > 0
+    winner = next(r for r in session_data.results if r.code == "VER")
+    assert winner.position == 1
+    assert winner.classified_position == "1"
+    assert winner.status == "Finished"
+    assert winner.total_time_seconds == pytest.approx(5636.736)
+    assert winner.gap_to_leader_seconds is None
+    runner_up = next(r for r in session_data.results if r.code == "PER")
+    assert runner_up.position == 2
+    assert runner_up.gap_to_leader_seconds == pytest.approx(11.987)
+
     assert len(session_data.laps) > 0
     lap = session_data.laps[0]
     assert lap.driver

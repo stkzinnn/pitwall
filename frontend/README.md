@@ -38,13 +38,43 @@ de bandeira — também texto, não imagem — nunca ícones/SVGs de bandeira.
 ```
 src/
   api/            cliente HTTP tipado (client.ts, types.ts espelham os schemas do backend, races.ts)
-  components/     componentes reutilizáveis (AppLayout, LoadingState, ErrorState, RaceSummary, DriverCard, DriverAvatar)
-  lib/            helpers de apresentação (driverDisplay.ts, countryFlag.ts)
-  theme/          mapas de identidade visual fora do CSS (teamColors.ts)
-  pages/          um componente por ecrã (RaceSelectionPage)
+  components/     componentes reutilizáveis: AppLayout, LoadingState, ErrorState, RaceSummary,
+                  DriverCard/DriverAvatar (identidade de piloto), TyreIcon/CompoundPicker
+                  (seletor de composto), StintEditor/StrategyBar/StrategyEditor (construtor),
+                  ResultsRow (linha clicável da classificação)
+  hooks/          useRaceSession — fetch + loading/erro partilhado por ecrãs que vivem numa
+                  URL /races/:year/:round/... (resultados, construtor)
+  lib/            helpers de apresentação (driverDisplay.ts, countryFlag.ts, strategyLabels.ts,
+                  raceResults.ts, formatTime.ts)
+  theme/          mapas de identidade visual fora do CSS (teamColors.ts, compoundColors.ts, color.ts)
+  pages/          um componente por ecrã (RaceSelectionPage, ResultsPage, StrategyBuilderPage)
   routes/         tabela central de rotas (paths.ts) — novos ecrãs acrescentam aqui, não como strings soltas
   index.css       tokens de tema + estilos base
 ```
+
+### Fluxo de navegação
+
+`RaceSelectionPage` (`/`) → `ResultsPage` (`/races/:year/:round/results`, classificação
+real, uma linha clicável por piloto) → `StrategyBuilderPage`
+(`/races/:year/:round/drivers/:driver/strategy`). A grelha de cartões de piloto que
+existia na seleção de corrida foi substituída por um único link "Ver classificação
+da corrida": a classificação já mostra identidade do piloto (mesmo estilo de
+avatar/cor de equipa) mais tempo, paragens e estratégia real — não fazia sentido
+ter duas UIs diferentes para escolher piloto.
+
+### Construtor de estratégias
+
+`StrategyBuilderPage` gere o estado de uma ou mais `NamedStrategy` — o mesmo
+formato (`{ label, strategy: StintPlan[] }`) que o backend espera em
+`POST /api/v1/compare` (ver `backend/app/schemas/simulation.py`), para a
+próxima etapa (ligar à API de simulação) não precisar de reestruturar nada,
+só enviar este estado diretamente. Ainda não chama `/simulate` nem `/compare`.
+
+A mesma `StrategyBar` usada no construtor (`stints planeados`) é reutilizada em
+`ResultsPage` para mostrar a estratégia REAL de cada piloto (`lib/raceResults.ts`
+converte `Stint[]` reais para o formato `StintPlan[]` que a barra já sabe
+desenhar) — linguagem visual consistente entre "o que aconteceu" e "o que
+podia ter acontecido".
 
 ## Desenvolvimento local
 

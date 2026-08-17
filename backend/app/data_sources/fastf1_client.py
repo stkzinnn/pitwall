@@ -8,7 +8,7 @@ import fastf1
 import pandas as pd
 
 from app.core.config import get_settings
-from app.schemas.session import DriverInfo, Lap, PitStop, SessionData, Stint
+from app.schemas.session import DriverInfo, DriverResult, Lap, PitStop, SessionData, Stint
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,7 @@ def load_session_data(year: int, round: int, session_type: str = "R") -> Session
             pit_stops=[],
             stints=[],
             drivers=[],
+            results=[],
             data_complete=False,
         )
 
@@ -94,6 +95,8 @@ def load_session_data(year: int, round: int, session_type: str = "R") -> Session
         logger.warning("No sector time data available for year=%s round=%s", year, round)
         data_complete = False
 
+    driver_codes = _unique_driver_codes(laps_df)
+
     return SessionData(
         year=year,
         round=round,
@@ -104,7 +107,8 @@ def load_session_data(year: int, round: int, session_type: str = "R") -> Session
         laps=_build_laps(laps_df),
         pit_stops=_build_pit_stops(laps_df),
         stints=_build_stints(laps_df),
-        drivers=_build_drivers(session, laps_df),
+        drivers=_build_drivers(session, driver_codes),
+        results=_build_results(session, driver_codes),
         data_complete=data_complete,
     )
 
@@ -141,6 +145,12 @@ def _to_int(value: Any) -> int | None:
     if value is None or pd.isna(value):
         return None
     return int(value)
+
+
+def _to_float(value: Any) -> float | None:
+    if value is None or pd.isna(value):
+        return None
+    return float(value)
 
 
 def _build_laps(laps_df: pd.DataFrame) -> list[Lap]:
@@ -214,22 +224,27 @@ def _build_stints(laps_df: pd.DataFrame) -> list[Stint]:
     return stints
 
 
-def _build_drivers(session: Any, laps_df: pd.DataFrame) -> list[DriverInfo]:
-    """One DriverInfo per driver who has laps in this session, in their
-    first-appearance order in the laps data. Name/number/team come from
-    session.results (a separate FastF1 dataset, keyed by driver code) when
-    available; a driver missing from results (or a session with no usable
-    results at all — e.g. very old/incomplete data) still gets an entry,
-    just with those fields as None rather than dropping the driver or
-    raising.
-    """
-    driver_codes: list[str] = []
+def _unique_driver_codes(laps_df: pd.DataFrame) -> list[str]:
+    """Driver codes in their first-appearance order in the laps data —
+    the canonical driver ordering shared by _build_drivers and
+    _build_results, so both line up with the same session.results rows."""
+    codes: list[str] = []
     seen: set[str] = set()
     for code in laps_df["Driver"]:
         if code not in seen:
             seen.add(code)
-            driver_codes.append(code)
+            codes.append(code)
+    return codes
 
+
+def _build_drivers(session: Any, driver_codes: list[str]) -> list[DriverInfo]:
+    """One DriverInfo per driver who has laps in this session. Name/
+    number/team come from session.results (a separate FastF1 dataset,
+    keyed by driver code) when available; a driver missing from results
+    (or a session with no usable results at all — e.g. very old/
+    incomplete data) still gets an entry, just with those fields as None
+    rather than dropping the driver or raising.
+    """
     info_by_code: dict[str, DriverInfo] = {}
     try:
         results = session.results
@@ -250,3 +265,46 @@ def _build_drivers(session: Any, laps_df: pd.DataFrame) -> list[DriverInfo]:
         logger.warning("Could not read session.results for driver info", exc_info=True)
 
     return [info_by_code.get(code, DriverInfo(code=code)) for code in driver_codes]
+
+
+def _build_results(session: Any, driver_codes: list[str]) -> list[DriverResult]:
+    """One DriverResult per driver (final classification) — see
+    DriverResult's docstring for the total_time_seconds vs.
+    gap_to_leader_seconds split. Degrades the same way _build_drivers
+    does: missing/unreadable session.results never raises, drivers just
+    fall back to a bare DriverResult(code=code).
+    """
+    result_by_code: dict[str, DriverResult] = {}
+    try:
+        results = session.results
+        if results is not None and not results.empty:
+            for row in results.itertuples():
+                code = getattr(row, "Abbreviation", None)
+                if not isinstance(code, str) or not code:
+                    continue
+
+                position = _to_int(getattr(row, "Position", None))
+                classified_position_raw = getattr(row, "ClassifiedPosition", None)
+                status_raw = getattr(row, "Status", None)
+                time_value = getattr(row, "Time", None)
+
+                total_time_seconds = _to_seconds(time_value) if position == 1 else None
+                gap_to_leader_seconds = _to_seconds(time_value) if position != 1 else None
+
+                result_by_code[code] = DriverResult(
+                    code=code,
+                    position=position,
+                    classified_position=(
+                        str(classified_position_raw)
+                        if isinstance(classified_position_raw, str) and classified_position_raw
+                        else None
+                    ),
+                    status=str(status_raw) if isinstance(status_raw, str) and status_raw else None,
+                    total_time_seconds=total_time_seconds,
+                    gap_to_leader_seconds=gap_to_leader_seconds,
+                    points=_to_float(getattr(row, "Points", None)),
+                )
+    except Exception:
+        logger.warning("Could not read session.results for classification", exc_info=True)
+
+    return [result_by_code.get(code, DriverResult(code=code)) for code in driver_codes]

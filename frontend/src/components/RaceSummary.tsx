@@ -1,7 +1,7 @@
+import { Link } from 'react-router-dom'
 import type { DriverInfo, SessionData } from '../api/types'
 import { getCountryFlag } from '../lib/countryFlag'
-import { groupByTeam } from '../lib/driverDisplay'
-import { DriverCard } from './DriverCard'
+import { raceResultsPath } from '../routes/paths'
 
 interface RaceSummaryProps {
   session: SessionData
@@ -20,9 +20,6 @@ const SESSION_TYPE_LABELS: Record<string, string> = {
 export function RaceSummary({ session, drivers }: RaceSummaryProps) {
   const sessionLabel = SESSION_TYPE_LABELS[session.session_type] ?? session.session_type
   const flag = getCountryFlag(session.country)
-  // Team pairs end up adjacent in the grid without needing group headers —
-  // each card already shows its own team name.
-  const orderedDrivers = groupByTeam(drivers).flatMap((group) => group.drivers)
 
   return (
     <div className="flex flex-col gap-8 rounded-xl border border-border bg-surface p-6 sm:p-8">
@@ -56,18 +53,21 @@ export function RaceSummary({ session, drivers }: RaceSummaryProps) {
         <StatItem label="Stints" value={session.stints.length} />
       </dl>
 
-      <div>
-        <h3 className="mb-3 text-sm font-medium text-text-muted">Pilotos</h3>
-        {orderedDrivers.length > 0 ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {orderedDrivers.map((driver) => (
-              <DriverCard key={driver.code} driver={driver} />
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-text-dim">Sem dados de pilotos para esta sessão.</p>
-        )}
-      </div>
+      <Link
+        to={raceResultsPath(session.year, session.round)}
+        className="flex items-center justify-between gap-4 rounded-lg border border-accent/40 bg-accent/10 px-5 py-4 transition-colors hover:border-accent hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <div>
+          <p className="font-medium text-text">Ver classificação da corrida</p>
+          <p className="mt-0.5 text-sm text-text-muted">
+            Resultado real, tempos, paragens e estratégia de cada piloto — ponto de partida para
+            simular alternativas.
+          </p>
+        </div>
+        <span className="shrink-0 font-mono text-xl text-accent" aria-hidden="true">
+          →
+        </span>
+      </Link>
     </div>
   )
 }

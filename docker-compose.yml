@@ -2,20 +2,60 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: pitwall
-      POSTGRES_PASSWORD: pitwall
-      POSTGRES_DB: pitwall
+      POSTGRES_USER: ${POSTGRES_USER:-pitwall}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pitwall}
+      POSTGRES_DB: ${POSTGRES_DB:-pitwall}
     ports:
-      # Host port 5433 (not the default 5432) to avoid clashing with a
-      # locally-installed PostgreSQL service, if you have one running.
-      - "5433:5432"
+      # Porta do host (a tua máquina) 5433, não a 5432 por omissão, para não
+      # colidir com um Postgres já instalado localmente. Dentro da rede
+      # Docker os outros serviços continuam a falar com "db:5432".
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - pitwall_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pitwall -d pitwall"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pitwall} -d ${POSTGRES_DB:-pitwall}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: ./backend
+    environment:
+      # Aqui dentro da rede interna do Docker, "db" é o NOME DO SERVIÇO
+      # acima, resolvido pelo DNS interno do Compose — e usamos sempre a
+      # porta 5432 (a porta "de dentro" do container do Postgres), nunca a
+      # POSTGRES_PORT publicada no host, que só serve para tu ligares um
+      # cliente de BD a partir da tua máquina.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-pitwall}:${POSTGRES_PASSWORD:-pitwall}@db:5432/${POSTGRES_DB:-pitwall}
+      CORS_ORIGINS: '["http://localhost:${FRONTEND_PORT:-8080}"]'
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      # "service_healthy" (não só "started"): o backend só arranca depois de
+      # o healthcheck do Postgres acima (pg_isready) passar, para não tentar
+      # ligar-se a uma base de dados que ainda está a inicializar.
+      db:
+        condition: service_healthy
+    volumes:
+      # Cache do FastF1 num volume nomeado, para sobreviver a restarts do
+      # container e não obrigar a redescarregar sessões já vistas.
+      - pitwall_fastf1_cache:/app/.cache/fastf1
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Este é o URL que o BROWSER do utilizador vai chamar (o frontend
+        # corre no browser, fora da rede Docker) — por isso tem de ser
+        # "localhost:<porta publicada do backend>", nunca "backend:8000"
+        # (esse nome só é resolvível dentro da rede interna do Compose).
+        VITE_API_BASE_URL: http://localhost:${BACKEND_PORT:-8000}
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+
 volumes:
   pitwall_postgres_data:
+  pitwall_fastf1_cache:

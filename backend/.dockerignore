@@ -1,0 +1,28 @@
+# Ambiente virtual local — nunca vai para a imagem, as dependências são
+# instaladas de raiz dentro do container (ver Dockerfile).
+.venv/
+venv/
+
+# Bytecode / caches de ferramentas — regenerados, não fazem sentido copiar.
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Cache do FastF1 — fica num volume Docker, não faz parte da imagem.
+.cache/
+
+# Segredos locais — a imagem recebe configuração via variáveis de ambiente
+# do docker-compose, nunca de um .env copiado para dentro dela.
+.env
+.env.*
+!.env.example
+
+# Testes não são precisos para correr a app em produção — reduz o tamanho
+# da imagem.
+tests/
+
+.git/

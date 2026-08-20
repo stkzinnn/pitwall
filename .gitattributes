@@ -1,0 +1,5 @@
+# Scripts com shebang (#!/bin/sh) têm de manter fim de linha LF mesmo em
+# checkouts Windows (core.autocrlf=true) — CRLF nesse ficheiro parte o
+# "docker build" com um erro de "bad interpreter", porque o Linux dentro do
+# container lê o \r como parte do caminho do interpretador.
+*.sh text eol=lf

@@ -1,0 +1,15 @@
+# Instalado de raiz dentro do container com "npm ci" — copiar a pasta local
+# (potencialmente doutro SO/arquitetura) só faria a imagem maior e instável.
+node_modules/
+
+# Build anterior, se existir localmente — o Dockerfile gera o seu próprio
+# dentro do container.
+dist/
+
+# Segredos locais — o valor de VITE_API_BASE_URL entra via build arg do
+# Dockerfile, não via .env copiado para dentro da imagem.
+.env
+.env.*
+!.env.example
+
+.git/

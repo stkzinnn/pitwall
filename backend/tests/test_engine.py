@@ -117,10 +117,16 @@ def test_simulate_strategy_skips_stint_with_unknown_compound_and_warns() -> None
     )
 
     # Only the SOFT stint contributes; still 1 pit stop cost for the
-    # 2-stint strategy, plus a partial-estimate warning.
+    # 2-stint strategy, plus an incomplete-estimate warning. The estimate
+    # is numeric but covers fewer laps (3) than the strategy planned (13)
+    # -> not comparable to the real total, no difference_seconds.
     assert result.estimated_total_time_seconds == pytest.approx(270.0 + 25.0)
     assert any("MEDIUM" in warning for warning in result.warnings)
-    assert any("parcial" in warning.lower() for warning in result.warnings)
+    assert any("incompleta" in warning.lower() for warning in result.warnings)
+    assert result.strategy_total_laps == 13
+    assert result.estimated_laps_covered == 3
+    assert result.is_complete_estimate is False
+    assert result.difference_seconds is None
 
 
 def test_simulate_strategy_returns_none_when_no_stint_can_be_estimated() -> None:

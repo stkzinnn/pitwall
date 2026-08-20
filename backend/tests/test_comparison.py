@@ -94,15 +94,20 @@ def test_compare_strategies_keeps_non_estimable_strategy_visible_but_sorted_last
     assert unknown_entry.has_warnings is True
 
 
-def test_compare_strategies_marks_partial_estimate_with_warnings_but_still_ranks_by_time() -> None:
-    """A strategy with SOME stints excluded (but still a numeric total)
-    must stay in the normal time-sorted order, not get pushed to the
-    non-estimable tail — it still has a comparable number."""
+def test_compare_strategies_pushes_incomplete_estimate_to_the_tail_never_best() -> None:
+    """A strategy with SOME stints excluded (numeric total, but covering
+    fewer laps than planned) must NOT compete for "best" and must NOT get
+    a delta_to_best_seconds — comparing a partial-distance estimate
+    against a full-distance one (real or another strategy) produces
+    physically impossible differences (see the STR/Bahrain 2023 bug this
+    guards against: a strategy missing a 15-lap stint came out "-1477s
+    faster" than the real race). It still appears in the response (never
+    silently dropped), just at the tail, like a fully non-estimable one."""
     driver_laps = [_lap(1, 100.0), _lap(2, 90.0), _lap(3, 90.0), _lap(4, 90.0)]
     real_stints = [Stint(driver="VER", stint_number=1, compound="SOFT", start_lap=1, end_lap=4)]
     named_strategies = [
         NamedStrategy(
-            label="partial",
+            label="incomplete",
             strategy=[
                 StintPlan(compound="SOFT", number_of_laps=3),
                 StintPlan(compound="MEDIUM", number_of_laps=50),  # never used -> excluded
@@ -123,14 +128,23 @@ def test_compare_strategies_marks_partial_estimate_with_warnings_but_still_ranks
         fuel_config=ZERO_FUEL_EFFECT_CONFIG,
     )
 
-    # "partial" (270.0 + 1 pit stop = 290.0) is slower than "clean" (270.0),
-    # both are numeric, so normal ascending order applies.
-    assert [entry.label for entry in result.strategies] == ["clean", "partial"]
+    # "incomplete" has a numeric estimated_total_time_seconds (270.0 for
+    # the SOFT stint + 1 pit stop = 290.0) but is_complete_estimate is
+    # False, so it's treated like a non-estimable strategy: pushed to the
+    # tail, not ranked by time against "clean".
+    assert [entry.label for entry in result.strategies] == ["clean", "incomplete"]
+    assert result.best_label == "clean"
 
-    partial_entry = result.strategies[1]
-    assert partial_entry.result.estimated_total_time_seconds is not None
-    assert partial_entry.has_warnings is True
-    assert partial_entry.delta_to_best_seconds == pytest.approx(20.0)
+    incomplete_entry = result.strategies[1]
+    assert incomplete_entry.result.estimated_total_time_seconds is not None
+    assert incomplete_entry.result.is_complete_estimate is False
+    assert incomplete_entry.result.difference_seconds is None
+    assert incomplete_entry.has_warnings is True
+    assert incomplete_entry.delta_to_best_seconds is None
+
+    clean_entry = result.strategies[0]
+    assert clean_entry.result.is_complete_estimate is True
+    assert clean_entry.delta_to_best_seconds == pytest.approx(0.0)
 
 
 def test_compare_strategies_appends_missing_pit_stop_warning_per_multi_stint_strategy() -> None:

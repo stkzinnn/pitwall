@@ -106,10 +106,23 @@ export interface SimulationResult {
   driver: string
   estimated_total_time_seconds: number | null
   real_total_time_seconds: number | null
+  /** Always null when `is_complete_estimate` is false — never compare a
+   * time that covers fewer laps than the strategy planned against the
+   * real (full-race) total. See is_complete_estimate. */
   difference_seconds: number | null
   safety_car_time_added_seconds: number
   safety_car_periods: SafetyCarPeriod[]
   warnings: string[]
+  /** Total laps the requested strategy planned for, vs. how many of
+   * those were actually estimated (a stint gets excluded entirely when
+   * the driver never ran that compound in the real session). */
+  strategy_total_laps: number
+  estimated_laps_covered: number
+  /** False whenever estimated_laps_covered !== strategy_total_laps (or
+   * there's no estimate at all) — only a complete estimate covers the
+   * same distance as the real race, so only a complete estimate can be
+   * compared to it or used for a position estimate / "best strategy". */
+  is_complete_estimate: boolean
 }
 
 export interface StrategyComparisonEntry {

@@ -42,7 +42,13 @@ def simulate_strategy(
     Se o piloto nunca usou aquele composto na sessão real (nenhum stint
     correspondente, em posição nenhuma), não há dados para estimar — o
     stint é excluído do total (não é adivinhado), e um aviso indica qual o
-    stint e o motivo.
+    stint e o motivo. Quando isto acontece, `estimated_total_time_seconds`
+    cobre MENOS voltas do que a estratégia pedida (e portanto menos do que
+    a corrida real toda) — comparar esse número contra o tempo real seria
+    comparar distâncias diferentes, por isso o resultado fica marcado
+    `is_complete_estimate=False` e `difference_seconds` sai sempre None
+    (ver SimulationResult e comparison.py, que também o exclui do "melhor
+    tempo").
 
     Cada PaceModel já representa ritmo "puro" de pneu, corrigido do efeito
     de combustível (ver fuel_model.py e pace_model.compute_stint_pace).
@@ -79,6 +85,9 @@ def simulate_strategy(
     estimated_total_time_seconds = 0.0
     computed_stints = 0
     skipped_stints = 0
+    skipped_laps = 0
+    estimated_laps_covered = 0
+    strategy_total_laps = sum(stint_plan.number_of_laps for stint_plan in strategy)
     race_lap_counter = 0
 
     for index, stint_plan in enumerate(strategy):
@@ -96,6 +105,7 @@ def simulate_strategy(
 
         if pace is None:
             skipped_stints += 1
+            skipped_laps += stint_plan.number_of_laps
             warnings.append(
                 f"Composto {stint_plan.compound!r} sem dados suficientes para "
                 f"{driver} nesta corrida; stint {index + 1} excluído da estimativa."
@@ -116,6 +126,7 @@ def simulate_strategy(
             )
 
         estimated_total_time_seconds += stint_time_seconds
+        estimated_laps_covered += stint_plan.number_of_laps
         computed_stints += 1
 
     number_of_pit_stops = max(len(strategy) - 1, 0)
@@ -128,11 +139,22 @@ def simulate_strategy(
         )
     else:
         estimated_total_time_seconds += safety_car_time_added_seconds
-        if skipped_stints:
-            warnings.append(
-                f"Estimativa parcial: {skipped_stints} de {len(strategy)} stint(s) "
-                "excluído(s) do tempo total por falta de dados de ritmo."
-            )
+
+    # A estimativa só é COMPLETA se todos os stints puderam ser calculados
+    # — uma estimativa parcial cobre menos voltas do que a estratégia
+    # pedida (e portanto menos do que a corrida real toda), por isso
+    # NUNCA é comparável ao tempo real: comparar "42 voltas estimadas"
+    # contra "57 voltas reais" produzia diferenças fisicamente
+    # impossíveis (ex.: "-1477s", "sobe para P1"). Ver
+    # SimulationResult.is_complete_estimate.
+    is_complete_estimate = estimated_total_time_seconds is not None and skipped_stints == 0
+
+    if skipped_stints:
+        warnings.append(
+            f"Estimativa incompleta: {skipped_stints} de {len(strategy)} stint(s) "
+            f"({skipped_laps} de {strategy_total_laps} voltas) excluído(s) por falta de "
+            "dados de ritmo — não é possível comparar com o tempo real nem estimar a posição."
+        )
 
     if safety_car_periods:
         periods_description = "; ".join(_describe_period(period) for period in safety_car_periods)
@@ -143,7 +165,11 @@ def simulate_strategy(
         )
 
     difference_seconds = None
-    if estimated_total_time_seconds is not None and real_total_time_seconds is not None:
+    if (
+        is_complete_estimate
+        and estimated_total_time_seconds is not None
+        and real_total_time_seconds is not None
+    ):
         difference_seconds = estimated_total_time_seconds - real_total_time_seconds
 
     return SimulationResult(
@@ -154,6 +180,9 @@ def simulate_strategy(
         safety_car_time_added_seconds=safety_car_time_added_seconds,
         safety_car_periods=safety_car_periods,
         warnings=warnings,
+        strategy_total_laps=strategy_total_laps,
+        estimated_laps_covered=estimated_laps_covered,
+        is_complete_estimate=is_complete_estimate,
     )
 
 

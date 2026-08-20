@@ -3,22 +3,19 @@ lado, reutilizando engine.simulate_strategy para cada uma — este módulo só
 orquestra (corre, ordena, calcula deltas), não reimplementa nenhuma lógica
 de simulação.
 
-CRITÉRIO DE ORDENAÇÃO (decisão explícita): estratégias com uma estimativa
-numérica (`estimated_total_time_seconds` não é None) aparecem primeiro,
-ordenadas por tempo estimado crescente — a mais rápida primeiro. Estratégias
-sem estimativa numérica nenhuma (ex.: todos os compostos pedidos sem dados
-suficientes) não têm um número para comparar, por isso ficam sempre no
-fim, pela ordem em que foram submetidas — aparecem no resultado (nunca são
-descartadas silenciosamente), mas não fazem sentido "ordenadas por tempo"
-porque não há tempo nenhum.
-
-Estratégias com uma estimativa PARCIAL (algum stint excluído, mas ainda
-com um número) continuam ordenadas normalmente pelo tempo — não são
-tratadas como "sem estimativa" — mas ficam marcadas com `has_warnings=True`
-(espelhando `result.warnings`), para o cliente decidir se confia menos
-nesse número. Excluí-las da ordenação seria escondê-las quando podem
-ainda ser a comparação mais útil disponível (ex.: só o último de 3 stints
-sem dados, os outros dois medidos com precisão).
+CRITÉRIO DE ORDENAÇÃO (decisão explícita): só estratégias com uma
+estimativa COMPLETA (`result.is_complete_estimate` — todos os stints
+puderam ser calculados, cobrindo a mesma distância que a estratégia
+pedida) competem pelo "melhor tempo" e entram na ordenação por tempo
+estimado crescente. Tudo o resto — sem estimativa numérica nenhuma (ex.:
+todos os compostos pedidos sem dados suficientes) OU com uma estimativa
+INCOMPLETA (algum stint excluído por falta de dados, cobrindo menos
+voltas do que o resto) — fica sempre no fim, pela ordem em que foi
+submetida. Nunca é descartada silenciosamente, mas também nunca ganha o
+rótulo de "melhor" nem um `delta_to_best_seconds`: comparar um tempo que
+cobre menos voltas contra o tempo real (ou contra outra estratégia
+completa) da corrida toda produzia diferenças fisicamente impossíveis
+(ex.: "-1477s", "sobe para P1") — ver engine.simulate_strategy.
 """
 
 from app.schemas.session import Lap, Stint
@@ -67,12 +64,8 @@ def compare_strategies(
         for named in named_strategies
     ]
 
-    estimable = [
-        pair for pair in labelled_results if pair[1].estimated_total_time_seconds is not None
-    ]
-    non_estimable = [
-        pair for pair in labelled_results if pair[1].estimated_total_time_seconds is None
-    ]
+    estimable = [pair for pair in labelled_results if pair[1].is_complete_estimate]
+    non_estimable = [pair for pair in labelled_results if not pair[1].is_complete_estimate]
     estimable.sort(key=lambda pair: pair[1].estimated_total_time_seconds)
 
     best_label: str | None = None
@@ -87,7 +80,9 @@ def compare_strategies(
             result=result,
             delta_to_best_seconds=(
                 result.estimated_total_time_seconds - best_time
-                if result.estimated_total_time_seconds is not None and best_time is not None
+                if result.is_complete_estimate
+                and result.estimated_total_time_seconds is not None
+                and best_time is not None
                 else None
             ),
             has_warnings=bool(result.warnings),

@@ -31,6 +31,11 @@ class SimulationResult(BaseModel):
     driver: str
     estimated_total_time_seconds: float | None = None
     real_total_time_seconds: float | None = None
+    # None sempre que `is_complete_estimate` for False — ver esse campo.
+    # Nunca comparamos um tempo estimado que cobre menos voltas do que a
+    # estratégia pedida contra o tempo real de TODA a corrida: isso
+    # produzia diferenças fisicamente impossíveis (ex.: "-1477s", "subiu
+    # para P1") quando um stint era excluído por falta de dados.
     difference_seconds: float | None = None
     # Tempo (real, medido) perdido em Safety Car/VSC durante a corrida,
     # somado ao tempo estimado para que a comparação seja justa — ver
@@ -38,6 +43,17 @@ class SimulationResult(BaseModel):
     safety_car_time_added_seconds: float = 0.0
     safety_car_periods: list[SafetyCarPeriod] = []
     warnings: list[str] = []
+    # Quantas voltas a estratégia pedida tinha no total, e quantas dessas
+    # voltas foram efetivamente estimadas (i.e. não caíram num stint
+    # excluído por falta de dados de ritmo — ver engine.simulate_strategy).
+    strategy_total_laps: int = 0
+    estimated_laps_covered: int = 0
+    # False sempre que estimated_laps_covered != strategy_total_laps (ou
+    # não há estimativa nenhuma) — só uma estimativa COMPLETA cobre a
+    # mesma distância que o tempo real, por isso só ela pode ser
+    # comparada com o tempo real ou usada para estimar posição/"melhor
+    # estratégia" (ver comparison.py e o frontend).
+    is_complete_estimate: bool = False
 
 
 class NamedStrategy(BaseModel):

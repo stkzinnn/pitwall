@@ -86,8 +86,29 @@ export function StrategyResultCard({
   driverCode,
   index,
 }: StrategyResultCardProps) {
-  const estimate = estimatePosition(session, driverCode, entry.result.estimated_total_time_seconds)
   const { result } = entry
+
+  // An INCOMPLETE estimate (some stint excluded for lack of pace data)
+  // covers fewer laps than the strategy planned — comparing that against
+  // the real (full-race) time, or using it for a position estimate,
+  // would compare different distances and produce nonsense (e.g. a
+  // strategy missing a 15-lap stint reading as "-1477s, jumps to P1").
+  // The backend already refuses to compute difference_seconds for these
+  // (is_complete_estimate=false), but the position estimate is derived
+  // client-side, so it has to be gated here too — never call
+  // estimatePosition for an incomplete result.
+  if (!result.is_complete_estimate) {
+    return (
+      <IncompleteStrategyResultCard
+        namedStrategy={namedStrategy}
+        entry={entry}
+        session={session}
+        index={index}
+      />
+    )
+  }
+
+  const estimate = estimatePosition(session, driverCode, result.estimated_total_time_seconds)
 
   const positionChanged =
     estimate.isComparable && estimate.realPosition !== null && estimate.estimatedPosition !== null &&
@@ -220,6 +241,77 @@ export function StrategyResultCard({
           </div>
         </div>
       )}
+
+      {result.warnings.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">
+          {result.warnings.map((warning, warningIndex) => (
+            <p key={warningIndex} className="flex items-start gap-2 text-sm text-text">
+              <span className="mt-0.5 text-warning" aria-hidden="true">
+                ⚠
+              </span>
+              <span>{warning}</span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface IncompleteStrategyResultCardProps {
+  namedStrategy: NamedStrategy
+  entry: StrategyComparisonEntry
+  session: SessionData
+  index: number
+}
+
+/** An estimate that skipped one or more stints for lack of pace data.
+ * Deliberately has NO hero number, NO time delta, NO position badge, and
+ * can never carry the "MAIS RÁPIDA" ribbon (the backend already excludes
+ * it from `best_label` — see comparison.py) — any of those would compare
+ * a partial-distance estimate against the real (full-race) time, which
+ * is exactly the bug this card exists to avoid. */
+function IncompleteStrategyResultCard({
+  namedStrategy,
+  entry,
+  session,
+  index,
+}: IncompleteStrategyResultCardProps) {
+  const { result } = entry
+  const missingLaps = result.strategy_total_laps - result.estimated_laps_covered
+
+  return (
+    <div
+      className="animate-result-in flex flex-col gap-6 rounded-xl border border-warning/40 bg-surface/90 p-6 backdrop-blur-sm sm:p-7"
+      style={{ animationDelay: `${index * 70}ms` }}
+    >
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-lg font-semibold text-text">{entry.label}</h3>
+          <span className="rounded-full bg-warning/15 px-3 py-1 text-xs font-semibold text-warning">
+            Estimativa incompleta
+          </span>
+        </div>
+        <StrategyBar strategy={namedStrategy.strategy} raceTotalLaps={session.total_laps} />
+      </div>
+
+      <div className="border-y border-border/60 py-5">
+        <p className="flex items-start gap-2 text-lg font-medium text-text">
+          <span className="mt-0.5 text-warning" aria-hidden="true">
+            ⚠
+          </span>
+          <span>
+            Faltam dados de ritmo para {missingLaps} de {result.strategy_total_laps} voltas
+            planeadas.
+          </span>
+        </p>
+        <p className="mt-2 text-sm text-text-muted">
+          Sem esses dados, o tempo estimado cobriria menos voltas do que a corrida real — por
+          isso não mostramos tempo, diferença nem posição estimada para esta estratégia (só
+          seriam comparações enganosas). Ajusta o composto do stint em falta para tentar de
+          novo.
+        </p>
+      </div>
 
       {result.warnings.length > 0 && (
         <div className="flex flex-col gap-2 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3">

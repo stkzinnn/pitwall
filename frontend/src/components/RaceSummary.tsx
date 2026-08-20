@@ -22,13 +22,13 @@ export function RaceSummary({ session, drivers }: RaceSummaryProps) {
   const flag = getCountryFlag(session.country)
 
   return (
-    <div className="flex flex-col gap-8 rounded-xl border border-border bg-surface p-6 sm:p-8">
+    <div className="animate-fade-rise-in flex flex-col gap-8 rounded-xl border border-border bg-surface/85 p-6 backdrop-blur-md sm:p-8">
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
           <p className="font-mono text-sm tracking-widest text-text-dim uppercase">
             {session.year} · Ronda {session.round} · {sessionLabel}
           </p>
-          <h2 className="mt-1 flex items-center gap-2 text-2xl font-semibold text-text">
+          <h2 className="mt-1 flex items-center gap-2 font-display text-2xl font-extrabold tracking-tight text-text">
             {flag && <span aria-hidden="true">{flag}</span>}
             {session.event_name ?? 'Nome do evento indisponível'}
           </h2>

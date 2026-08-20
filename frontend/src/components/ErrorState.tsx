@@ -6,7 +6,7 @@ export function ErrorState({ message }: ErrorStateProps) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-3 rounded-lg border border-danger/40 bg-danger/10 px-5 py-4"
+      className="animate-fade-rise-in flex items-start gap-3 rounded-lg border border-danger/40 bg-danger/10 px-5 py-4 backdrop-blur-sm"
     >
       <span className="mt-0.5 font-mono text-danger" aria-hidden="true">
         ✕

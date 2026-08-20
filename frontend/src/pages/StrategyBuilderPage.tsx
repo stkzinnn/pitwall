@@ -189,13 +189,13 @@ function StrategyBuilderContent({
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-5 rounded-xl border border-border bg-surface p-6 sm:flex-row sm:items-center sm:justify-between sm:p-8">
+      <div className="flex flex-col gap-5 rounded-xl border border-border bg-surface/90 p-6 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between sm:p-8">
         <div>
           <p className="font-mono text-sm tracking-widest text-text-dim uppercase">
             {session.year} · Ronda {session.round}
             {session.total_laps !== null && ` · ${session.total_laps} voltas`}
           </p>
-          <h1 className="mt-1 text-2xl font-semibold text-text">
+          <h1 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-text sm:text-3xl">
             {session.event_name ?? 'Corrida'}
           </h1>
           <p className="mt-1 text-sm text-text-muted">Construtor de estratégia</p>
@@ -230,7 +230,7 @@ function StrategyBuilderContent({
           <button
             type="button"
             onClick={onAddStrategy}
-            className="self-start rounded-md bg-accent px-5 py-2.5 font-medium text-bg transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+            className="self-start rounded-md bg-accent px-5 py-2.5 font-medium text-white transition-colors hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           >
             + Adicionar estratégia
           </button>
@@ -239,7 +239,7 @@ function StrategyBuilderContent({
             type="button"
             onClick={onSimulate}
             disabled={!canSimulate || comparisonStatus === 'loading'}
-            className="self-start rounded-md border border-accent px-5 py-2.5 font-medium text-accent transition-colors hover:bg-accent hover:text-bg disabled:cursor-not-allowed disabled:border-border disabled:text-text-dim disabled:hover:bg-transparent"
+            className="self-start rounded-md border border-accent px-5 py-2.5 font-medium text-accent transition-colors hover:bg-accent hover:text-white disabled:cursor-not-allowed disabled:border-border disabled:text-text-dim disabled:hover:bg-transparent"
           >
             {comparisonStatus === 'loading' ? 'A simular…' : 'Simular estratégias'}
           </button>
@@ -259,7 +259,9 @@ function StrategyBuilderContent({
       {comparisonStatus === 'success' && comparisonResult && (
         <div className="flex flex-col gap-6">
           <div>
-            <h2 className="text-2xl font-semibold text-text">Resultados da simulação</h2>
+            <h2 className="font-display text-2xl font-extrabold tracking-tight text-text">
+              Resultados da simulação
+            </h2>
             <p className="mt-2 flex items-start gap-2 max-w-3xl text-sm text-text-muted">
               <span className="mt-0.5 text-accent" aria-hidden="true">
                 📻

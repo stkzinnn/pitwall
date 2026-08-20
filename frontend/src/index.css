@@ -1,54 +1,75 @@
 @import "tailwindcss";
 
 /*
- * Design tokens — PitWall "pit wall" dark theme.
+ * Design tokens — PitWall "Estação de Estratégia" dark theme.
  *
  * Tailwind v4 turns every `--color-*` / `--font-*` custom property below
  * into utility classes automatically (e.g. --color-surface -> bg-surface,
  * text-surface, border-surface; --font-mono -> font-mono). Every future
  * screen should reach for these tokens instead of hardcoding hex values,
  * so the theme stays coherent and only needs updating in one place.
+ *
+ * COLOR SEMANTICS (deliberate, don't blur these):
+ * --color-accent (race red) is the BRAND identity — logo, primary
+ * buttons, headline emphasis, focus rings, the 3D hero. It never means
+ * "good" or "bad" by itself.
+ * --color-success (green) means ONLY "better / faster / gained position /
+ * winning strategy" — never used as a decorative accent.
+ * --color-danger (red-orange, distinct from the brand red) means "worse /
+ * slower / lost position". Same token also covers generic error states,
+ * which is consistent (an error is also "something went wrong").
  */
 @theme {
-  /* Base surfaces — dark, slightly blue-tinted, like a strategy monitor. */
-  --color-bg: #0a0d12;
-  --color-surface: #12161d;
-  --color-surface-raised: #1a1f28;
-  --color-border: #262c37;
-  --color-border-strong: #384152;
+  /* Base surfaces — deep black with a warm (not blue) undertone, like a
+     garage at night lit by tail lights rather than a screen. */
+  --color-bg: #0b0708;
+  --color-surface: #181011;
+  --color-surface-raised: #211517;
+  --color-border: #2a1a1c;
+  --color-border-strong: #43262a;
 
   /* Text */
-  --color-text: #e6e9ef;
-  --color-text-muted: #8b93a3;
-  --color-text-dim: #5b6472;
+  --color-text: #fdeff0;
+  --color-text-muted: #b39599;
+  --color-text-dim: #7a595e;
 
-  /* Accent — for interactive elements and highlights only, used sparingly. */
-  --color-accent: #22d3ee;
-  --color-accent-strong: #0891b2;
+  /* Accent — the brand: race red. Logo, primary actions, headline
+     emphasis, focus rings, the 3D hero. Used deliberately, not as a
+     generic "pretty color" sprinkled everywhere. */
+  --color-accent: #ff2d3f;
+  --color-accent-strong: #c81f2e;
 
-  /* Semantic status (distinct from tyre colors below, even where similar
-     hues overlap — status describes app state, tyres describe compound). */
-  --color-success: #34d399;
-  --color-danger: #f75466;
+  /* Semantic status — SEPARATE from the brand accent on purpose (see note
+     above): green only ever means "better/faster/won", red-orange only
+     ever means "worse/slower/lost" (or a generic error). */
+  --color-success: #38e8b0;
+  --color-danger: #ff4d4d;
   --color-warning: #f5c518;
 
   /* Tyre compounds — the visual language for strategy screens. Every
      screen that shows a compound must use these tokens, never a raw hex,
-     so a compound always reads the same color everywhere. */
-  --color-tyre-soft: #e8253b;
-  --color-tyre-medium: #f5c518;
-  --color-tyre-hard: #eef0f2;
+     so a compound always reads the same color everywhere. SOFT is a
+     distinct red-pink, deliberately not the same red as --color-accent,
+     so "fastest tyre" and "brand identity" never get confused. */
+  --color-tyre-soft: #ff3b6b;
+  --color-tyre-medium: #f4d03f;
+  --color-tyre-hard: #f0f2f7;
   --color-tyre-intermediate: #3aa655;
   --color-tyre-wet: #2f7de1;
 
-  /* Typography: monospace for anything numeric/telemetry (lap times,
-     deltas, lap counts) to read like a timing screen; sans for prose/UI
-     labels. */
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+  /* Typography: a strong display face for headlines/hero numbers (the
+     "editorial" half of the brief), a humanist sans for body/UI prose,
+     and monospace for every number that reads like telemetry (lap times,
+     deltas, positions, lap counts) — see index.html for the font-face
+     imports. */
+  --font-display:
+    "Archivo", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
   --font-mono:
-    ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas,
+    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas,
     "Liberation Mono", monospace;
 }
 
@@ -68,6 +89,115 @@ body {
 
 #root {
   min-height: 100vh;
+}
+
+/* Ambient static backdrop for every screen that isn't the animated 3D
+   hero (see RaceBackground.tsx) — two soft, off-center radial glows in
+   the brand red, fixed to the viewport so they read as part of the room
+   rather than the page content. Deliberately CSS-only (no WebGL) so
+   non-hero screens cost nothing extra to render. */
+.ambient-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      60rem 40rem at 85% -10%,
+      color-mix(in srgb, var(--color-accent) 14%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      50rem 36rem at -10% 110%,
+      color-mix(in srgb, var(--color-accent) 8%, transparent),
+      transparent 60%
+    );
+}
+
+/* Simulation results: a soft fade + rise as each strategy card appears,
+   so "Simular estratégias" reads as a calculation completing rather than
+   the layout just snapping into place. Staggered per-card via an inline
+   animation-delay (see StrategyResultCard). */
+@keyframes result-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-result-in {
+  animation: result-card-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* General-purpose fade-rise for cards/panels appearing after a fetch —
+   same easing/distance as .animate-result-in, unstaggered by default. */
+@keyframes fade-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-rise-in {
+  animation: fade-rise-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-result-in,
+  .animate-fade-rise-in {
+    animation: none;
+  }
+}
+
+/* Hero decorations (RaceSelectionPage): a streaming-telemetry pulse on
+   the demo panel's waveform, and a scroll cue at the foot of the hero.
+   Both purely decorative motion, both switched off by
+   prefers-reduced-motion via the .motion-reduce:animate-none utility
+   applied where they're used. */
+@keyframes telemetry-pulse {
+  0%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.55;
+  }
+  50% {
+    stroke-dashoffset: -12;
+    opacity: 0.9;
+  }
+}
+
+.animate-telemetry-pulse {
+  stroke-dasharray: 6 5;
+  animation: telemetry-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes scroll-cue {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(14px);
+    opacity: 0;
+  }
+}
+
+.animate-scroll-cue {
+  animation: scroll-cue 1.8s ease-in-out infinite;
 }
 
 /* Simulation results: a soft fade + rise as each strategy card appears,

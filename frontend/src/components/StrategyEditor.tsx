@@ -26,7 +26,7 @@ export function StrategyEditor({
   const matchesRaceDistance = raceTotalLaps === null || lapDelta === 0
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 sm:p-6">
+    <div className="animate-fade-rise-in flex flex-col gap-4 rounded-xl border border-border bg-surface/90 p-5 backdrop-blur-sm transition-colors hover:border-border-strong sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <input
           type="text"

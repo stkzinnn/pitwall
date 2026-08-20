@@ -44,7 +44,7 @@ function ResultsContent({ session }: { session: SessionData }) {
           {session.year} · Ronda {session.round}
           {session.total_laps !== null && ` · ${session.total_laps} voltas`}
         </p>
-        <h1 className="mt-1 text-3xl font-semibold text-text">
+        <h1 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-text sm:text-4xl">
           {session.event_name ?? 'Corrida'}
         </h1>
         <p className="mt-2 text-text-muted">
@@ -54,7 +54,7 @@ function ResultsContent({ session }: { session: SessionData }) {
       </div>
 
       {orderedResults.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-border bg-surface">
+        <div className="animate-fade-rise-in overflow-x-auto rounded-xl border border-border bg-surface/90 backdrop-blur-sm">
           <table className="w-full min-w-[640px] border-collapse">
             <thead>
               <tr className="border-b border-border text-left text-xs tracking-wide text-text-dim uppercase">

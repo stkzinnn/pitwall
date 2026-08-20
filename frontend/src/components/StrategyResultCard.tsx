@@ -105,14 +105,14 @@ export function StrategyResultCard({
     <div
       className={
         isBest
-          ? 'animate-result-in relative flex flex-col gap-6 overflow-hidden rounded-xl border border-accent bg-gradient-to-br from-accent/10 via-surface to-surface p-6 shadow-[0_0_0_1px_rgba(34,211,238,0.12),0_24px_48px_-28px_rgba(34,211,238,0.45)] sm:p-7'
-          : 'animate-result-in flex flex-col gap-6 rounded-xl border border-border bg-surface p-6 sm:p-7'
+          ? 'animate-result-in relative flex flex-col gap-6 overflow-hidden rounded-xl border border-accent bg-gradient-to-br from-accent/15 via-surface to-surface p-6 shadow-[0_0_0_1px_rgba(255,45,63,0.15),0_24px_48px_-28px_rgba(255,45,63,0.5)] backdrop-blur-sm sm:p-7'
+          : 'animate-result-in flex flex-col gap-6 rounded-xl border border-border bg-surface/90 p-6 backdrop-blur-sm sm:p-7'
       }
       style={{ animationDelay: `${index * 70}ms` }}
     >
       {isBest && (
         <div
-          className="pointer-events-none absolute -right-11 top-5 w-40 rotate-45 bg-accent py-1 text-center text-[11px] font-bold tracking-widest text-bg uppercase shadow-md"
+          className="pointer-events-none absolute -right-11 top-5 w-40 rotate-45 bg-accent py-1 text-center text-[11px] font-bold tracking-widest text-white uppercase shadow-md"
           aria-hidden="true"
         >
           Mais rápida

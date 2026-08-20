@@ -9,21 +9,45 @@ React + TypeScript + Vite. UI do PitWall Strategy Simulator.
 - **Tailwind CSS v4** (em vez de CSS Modules) — escolhido especificamente pela forma como o v4 trata *design tokens*: as cores/tipografia definidas em `src/index.css` (bloco `@theme`) tornam-se classes utilitárias automaticamente (`bg-surface`, `text-tyre-soft`, `font-mono`, ...). Isso mantém **um único sítio** para o tema (pedido explícito: "cores dos compostos... guardar como tokens/variáveis reutilizáveis, não hardcoded espalhados") em vez de repetir valores por CSS Modules em cada componente. Como o projeto vai ganhar vários ecrãs de telemetria com a mesma linguagem visual, isto compensa a curva de aprendizagem inicial do Tailwind.
 - **Nenhuma lib de HTTP** — a API do backend é pequena e mesma-origem em espírito; um wrapper fino sobre `fetch` (`src/api/client.ts`) chega, sem trazer axios/react-query nesta fase.
 
-## Tema — "pit wall"
+## Tema — "Estação de Estratégia"
+
+Direção visual (Fase 5): telemetria técnica (dados densos, mono nos números,
+cor de composto como código visual) + tom editorial/cinematográfico
+(tipografia display forte, drama nos momentos-chave — o herói P→P dos
+resultados de simulação, o fundo 3D da página inicial). Base preta com tom
+quente (não azulado), acento vermelho-corrida como identidade de marca.
 
 Tokens centrais em [`src/index.css`](src/index.css) (`@theme`):
 
 | Token | Uso |
 |---|---|
-| `--color-bg`, `--color-surface`, `--color-surface-raised` | Fundo da página, painéis, elementos elevados (escala de escuro) |
+| `--color-bg`, `--color-surface`, `--color-surface-raised` | Fundo da página, painéis, elementos elevados (preto quente) |
 | `--color-border`, `--color-border-strong` | Contornos subtis / mais marcados |
 | `--color-text`, `--color-text-muted`, `--color-text-dim` | Hierarquia de texto |
-| `--color-accent`, `--color-accent-strong` | Ações/destaques — usar com moderação |
-| `--color-success`, `--color-danger`, `--color-warning` | Estado da aplicação (distintos dos tokens de composto, mesmo com tons próximos) |
-| `--color-tyre-soft` (vermelho), `--color-tyre-medium` (amarelo), `--color-tyre-hard` (branco/cinza), `--color-tyre-intermediate`, `--color-tyre-wet` | Linguagem visual de composto de pneu — usar em todos os ecrãs que mostrem compostos |
-| `--font-sans`, `--font-mono` | Mono para tudo o que for numérico/telemetria (tempos, deltas), sans para o resto |
+| `--color-accent`, `--color-accent-strong` | **Identidade de marca** (vermelho-corrida) — logo, ações primárias, títulos em destaque, foco, o fundo 3D. Nunca usado para significar "melhor" ou "pior". |
+| `--color-success` | **Só** "melhor / mais rápido / subiu de posição / estratégia vencedora" — nunca um acento decorativo genérico |
+| `--color-danger` | "pior / mais lento / desceu de posição" (e estados de erro genéricos) |
+| `--color-warning` | Avisos (dados parciais, discrepância de voltas, safety car) |
+| `--color-tyre-soft` (vermelho-rosa, distinto do vermelho de marca), `--color-tyre-medium` (amarelo), `--color-tyre-hard` (branco/cinza), `--color-tyre-intermediate`, `--color-tyre-wet` | Linguagem visual de composto de pneu — usar em todos os ecrãs que mostrem compostos |
+| `--font-display` | Títulos/heróis (Archivo, 700–900) — grande, tight tracking |
+| `--font-sans` | Corpo/prosa (Inter) |
+| `--font-mono` | Todo número que seja "telemetria": tempos, deltas, posições, voltas (JetBrains Mono) |
 
-Qualquer ecrã novo deve usar estas classes (`bg-surface`, `text-tyre-hard`, `font-mono`, etc.) em vez de valores hex soltos.
+Fontes carregadas via Google Fonts em [`index.html`](index.html). Qualquer
+ecrã novo deve usar estas classes (`bg-surface`, `text-tyre-hard`,
+`font-mono`, `font-display`, etc.) em vez de valores hex soltos.
+
+### Fundo 3D (`RaceBackground.tsx`)
+
+Um circuito estilizado em three.js (não `@react-three/fiber` — é uma cena
+isolada e imperativa com o seu próprio loop de render, mais simples de
+pausar/retomar fora do ciclo do React sem trazer um reconciler React→WebGL
+inteiro). Usado **só** no hero da `RaceSelectionPage` (lazy-loaded — o
+chunk de three.js só é pedido nessa página) e nunca nos ecrãs de trabalho,
+que usam antes o `.ambient-backdrop` estático em CSS (ver `index.css`).
+Pausa em `visibilitychange`, sai de cena via `IntersectionObserver`, e
+respeita `prefers-reduced-motion` (não inicia WebGL nenhum, mostra 1 frame
+estático).
 
 ### Cores de equipa e avatares de piloto — sem material protegido
 
@@ -38,10 +62,11 @@ de bandeira — também texto, não imagem — nunca ícones/SVGs de bandeira.
 ```
 src/
   api/            cliente HTTP tipado (client.ts, types.ts espelham os schemas do backend, races.ts)
-  components/     componentes reutilizáveis: AppLayout, LoadingState, ErrorState, RaceSummary,
-                  DriverCard/DriverAvatar (identidade de piloto), TyreIcon/CompoundPicker
-                  (seletor de composto), StintEditor/StrategyBar/StrategyEditor (construtor),
-                  ResultsRow (linha clicável da classificação)
+  components/     componentes reutilizáveis: AppLayout, Logo, RaceBackground (hero 3D),
+                  LoadingState, ErrorState, RaceSummary, DriverCard/DriverAvatar (identidade de
+                  piloto), TyreIcon/CompoundPicker (seletor de composto),
+                  StintEditor/StrategyBar/StrategyEditor (construtor), ResultsRow (linha clicável
+                  da classificação), StrategyResultCard (resultado de simulação)
   hooks/          useRaceSession — fetch + loading/erro partilhado por ecrãs que vivem numa
                   URL /races/:year/:round/... (resultados, construtor)
   lib/            helpers de apresentação (driverDisplay.ts, countryFlag.ts, strategyLabels.ts,

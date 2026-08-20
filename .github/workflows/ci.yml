@@ -1,0 +1,121 @@
+name: CI
+
+# Corre em todos os pushes (qualquer ramo, incluindo master) e em todos os
+# pull requests. Sem filtro de "branches:", por isso não precisa de lista de
+# ramos para se manter atualizado à medida que criares novos.
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    # Aplicado a todos os "run:" dos steps abaixo — evita repetir
+    # "cd backend" em cada um. Não afeta os inputs de actions (como o
+    # actions/cache mais abaixo), só os steps que correm comandos de shell.
+    defaults:
+      run:
+        working-directory: backend
+
+    # "service container": um container Postgres extra, à parte do runner,
+    # ligado à mesma rede — os steps do job acedem-lhe em "localhost:5432"
+    # (não "db", esse nome só existe no docker-compose.yml local). O
+    # healthcheck faz o GitHub Actions esperar que o Postgres esteja pronto
+    # a aceitar ligações ANTES de correr o primeiro step — sem isto, o
+    # Alembic/pytest podiam arrancar contra uma base de dados ainda a
+    # inicializar e falhar por corrida (race condition), não por um erro
+    # real no código.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pitwall
+          POSTGRES_PASSWORD: pitwall
+          POSTGRES_DB: pitwall
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pitwall -d pitwall"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Variáveis de ambiente partilhadas por todos os steps deste job.
+    # DATABASE_URL é o mesmo mecanismo que a app usa localmente
+    # (app/core/config.py lê-a via pydantic-settings) — aqui aponta para o
+    # service container acima em vez do docker-compose.yml local. Não há
+    # segredos "a sério" a proteger (é só um Postgres descartável, vive e
+    # morre com o job), mas o padrão de os passar via "env:" em vez de
+    # hardcoded dentro dos comandos aplica-se da mesma forma no dia em que
+    # precisares de credenciais reais aqui.
+    env:
+      DATABASE_URL: postgresql+asyncpg://pitwall:pitwall@localhost:5432/pitwall
+
+    steps:
+      # 1. Vai buscar o código deste commit ao runner (sem isto, o runner
+      #    começa vazio — nenhum step consegue ver o repositório).
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # 2. Instala o Python 3.11 (mesma versão do Dockerfile e do
+      #    "requires-python" no pyproject.toml). "cache: pip" guarda a
+      #    pasta de cache do pip entre execuções do workflow, indexada pelo
+      #    hash dos ficheiros em "cache-dependency-path" — só volta a
+      #    descarregar pacotes se requirements.txt/requirements-dev.txt
+      #    mudarem, tal como a cache de camadas do Docker faz para os
+      #    Dockerfiles.
+      - name: Instalar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      # 3. requirements-dev.txt começa com "-r requirements.txt", por isso
+      #    instalar só este ficheiro traz as duas listas (produção + dev:
+      #    pytest, ruff, mypy, aiosqlite, ...).
+      - name: Instalar dependências
+        run: pip install -r requirements-dev.txt
+
+      # 4. Lint — falha o job (exit code != 0) se o ruff encontrar
+      #    problemas. Corre antes dos testes de propósito: é muito mais
+      #    rápido que a suite toda, por isso dá feedback imediato sem
+      #    esperar pelos testes de integração (que fazem pedidos de rede).
+      - name: Lint (ruff)
+        run: ruff check .
+
+      # Cache da pasta onde o FastF1 guarda os dados de sessão descarregados
+      # (backend/.cache/fastf1). Os testes de integração usam sempre a
+      # mesma sessão real (2023, corrida 1), por isso a chave de cache é
+      # fixa — sem esta cache, TODOS os runs de CI teriam de descarregar os
+      # dados da sessão de novo (mais lento, e depende da API do FastF1
+      # estar disponível nesse momento); com ela, só o primeiro run "paga"
+      # esse custo.
+      - name: Cache da FastF1
+        uses: actions/cache@v4
+        with:
+          path: backend/.cache/fastf1
+          key: fastf1-cache-2023-round1
+
+      # 5. As tabelas NÃO são criadas pelas fixtures dos testes de
+      #    integração (ver tests/test_races_api.py e tests/conftest.py):
+      #    só os testes rápidos, marcados fora de "integration", usam uma
+      #    SQLite em memória que cria o schema sozinha via
+      #    Base.metadata.create_all. Os testes "integration" ligam-se
+      #    diretamente à app tal como ela corre a sério, por isso a base de
+      #    dados (aqui, o service container acima) tem de já ter o schema
+      #    aplicado — exatamente como o docker-entrypoint.sh faz no
+      #    container do backend.
+      - name: Aplicar migrations (alembic upgrade head)
+        run: alembic upgrade head
+
+      # 6. Suite completa (91 testes, unitários + integração), com
+      #    cobertura (--cov já vem de pyproject.toml/[tool.pytest.ini_options]
+      #    addopts, não precisa repetir aqui). Os testes marcados
+      #    "integration" usam a DATABASE_URL do env: acima e, para os que
+      #    tocam FastF1, a cache do step anterior.
+      - name: Testes (pytest)
+        run: pytest

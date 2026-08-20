@@ -68,3 +68,52 @@ jobs:
       #    comando ("pytest -m integration").
       - name: Testes (pytest)
         run: pytest -m "not integration"
+
+  # Job independente do "backend" acima — corre em paralelo, no seu próprio
+  # runner, sem partilhar nada com ele (nem sequer sabe que o outro job
+  # existe). Só precisa do frontend/package-lock.json e do código React; não
+  # arranca o backend nem faz pedidos à API, por isso é tão hermético como o
+  # job do backend.
+  frontend:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      # 1. Vai buscar o código deste commit ao runner.
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # 2. Instala o Node 22 (mesma versão do frontend/Dockerfile, stage de
+      #    build). "cache: npm" guarda a cache de pacotes do npm entre
+      #    execuções, indexada pelo hash do lock file indicado em
+      #    "cache-dependency-path" — só invalida quando as dependências
+      #    mudam de facto.
+      - name: Instalar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      # 3. Instalação limpa e reprodutível: "npm ci" (ao contrário de
+      #    "npm install") instala exatamente o que está no
+      #    package-lock.json e falha se ele estiver desatualizado face ao
+      #    package.json, em vez de o reescrever silenciosamente.
+      - name: Instalar dependências
+        run: npm ci
+
+      # 4. Lint com oxlint (é o que este projeto usa — não há ESLint
+      #    configurado). Falha o job se encontrar problemas.
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      # 5. "npm run build" corre "tsc -b && vite build": primeiro o
+      #    type-check do TypeScript (falha se houver erros de tipos),
+      #    depois o build de produção do Vite. Não precisa do backend a
+      #    correr — VITE_API_BASE_URL só é embutido no bundle gerado, o
+      #    build em si não faz nenhum pedido de rede à API.
+      - name: Build (type-check + vite build)
+        run: npm run build
